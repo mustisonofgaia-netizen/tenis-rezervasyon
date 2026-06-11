@@ -1,9 +1,11 @@
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { useNavigation } from '@react-navigation/native';
+import * as Notifications from 'expo-notifications';
 import { FirebaseError } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -23,6 +25,11 @@ import { app } from '../services/firebase';
 import type { SlotInfo } from '../types/booking';
 import type { CreatePaymentSessionResponse } from '../types/payment';
 
+type BookingNavProp = BottomTabNavigationProp<{
+  Booking: undefined;
+  MyBookings: undefined;
+}>;
+
 const functions = getFunctions(app);
 
 const createPaymentSession = httpsCallable<
@@ -36,6 +43,7 @@ type PaymentSession = {
 };
 
 export function BookingScreen() {
+  const navigation = useNavigation<BookingNavProp>();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -112,11 +120,18 @@ export function BookingScreen() {
     setShowMockPayment(false);
     setPaymentSession(null);
     setSelectedSlot(null);
-    Alert.alert(
-      'Rezervasyon Onaylandı',
-      'Test ödemeniz başarıyla tamamlandı. Rezervasyonunuz onaylandı.',
-    );
-  }, []);
+    navigation.navigate('MyBookings');
+    Notifications.scheduleNotificationAsync({
+      content: {
+        title: '🎾 Rezervasyonunuz Onaylandı!',
+        body: 'Mustafa Görkem Tenis Kulübü - Merkez Kort rezerve edildi. Kapı giriş kodunuz: TC-348',
+        sound: true,
+      },
+      trigger: null,
+    }).catch(() => {
+      // Notification scheduling failed — non-critical, booking is still confirmed
+    });
+  }, [navigation]);
 
   const handleConfirmPayment = useCallback(async () => {
     if (!selectedDate || !selectedSlot || isProcessing) {

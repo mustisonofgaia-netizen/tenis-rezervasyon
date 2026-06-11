@@ -1,6 +1,8 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
+import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { BookingScreen } from './src/screens/BookingScreen';
@@ -12,9 +14,24 @@ export type RootTabParamList = {
   MyBookings: undefined;
 };
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 const Tab = createBottomTabNavigator<RootTabParamList>();
 
 export default function App() {
+  useEffect(() => {
+    Notifications.requestPermissionsAsync().catch(() => {
+      // Permission denied or unavailable — notifications are opt-in, safe to ignore
+    });
+  }, []);
+
   return (
     <SafeAreaProvider>
       <NavigationContainer>
