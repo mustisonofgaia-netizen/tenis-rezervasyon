@@ -18,14 +18,9 @@ function isSelectable(status: SlotStatus): boolean {
 }
 
 function getStatusLabel(status: SlotStatus): string | null {
-  if (status === 'CONFIRMED') {
-    return 'Dolu';
-  }
-
-  if (status === 'LOCKED') {
-    return 'Kilitli';
-  }
-
+  if (status === 'CONFIRMED') return 'Dolu';
+  if (status === 'LOCKED') return 'Kilitli';
+  if (status === 'BLOCKED') return 'Kapalı';
   return null;
 }
 
@@ -59,6 +54,7 @@ export function TimeSlotGrid({ slots, onSelectSlot }: TimeSlotGridProps) {
               isSelected && styles.slotSelected,
               slot.status === 'LOCKED' && styles.slotLocked,
               slot.status === 'CONFIRMED' && styles.slotBooked,
+              slot.status === 'BLOCKED' && styles.slotBlocked,
             ]}
           >
             <Text
@@ -107,6 +103,10 @@ const styles = StyleSheet.create({
   slotBooked: {
     backgroundColor: '#E5E7EB',
     opacity: 0.75,
+  },
+  slotBlocked: {
+    backgroundColor: '#1F2937',
+    opacity: 0.7,
   },
   slotText: {
     fontSize: 15,

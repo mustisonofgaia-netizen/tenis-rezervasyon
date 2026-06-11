@@ -7,9 +7,11 @@ import {
   runTransaction,
   serverTimestamp,
   Timestamp,
+  updateDoc,
 } from 'firebase/firestore';
 
 import {
+  AdminSlotInfo,
   ConfirmedBooking,
   DEFAULT_SLOT_TIMES,
   LOCK_DURATION_MS,
@@ -31,24 +33,18 @@ function isLockActive(lockTimestamp: Timestamp | undefined): boolean {
 }
 
 function resolveSlotStatus(record: SlotRecord | undefined): SlotStatus {
-  if (!record) {
-    return 'FREE';
-  }
-
-  if (record.status === 'CONFIRMED') {
-    return 'CONFIRMED';
-  }
-
+  if (!record) return 'FREE';
+  if (record.status === 'CONFIRMED') return 'CONFIRMED';
+  if (record.status === 'BLOCKED') return 'BLOCKED';
   if (record.status === 'LOCKED') {
     return isLockActive(record.lockTimestamp) ? 'LOCKED' : 'FREE';
   }
-
   return 'FREE';
 }
 
 function isSlotUnavailable(record: SlotRecord | undefined): boolean {
   const status = resolveSlotStatus(record);
-  return status === 'CONFIRMED' || status === 'LOCKED';
+  return status === 'CONFIRMED' || status === 'LOCKED' || status === 'BLOCKED';
 }
 
 function buildSlotList(slots: ReservationDocument['slots']): SlotInfo[] {
@@ -203,6 +199,27 @@ export async function unlockSlot(date: string, slotTime: string): Promise<void> 
   }
 }
 
+export async function cancelBooking(
+  date: string,
+  slotTime: string,
+  userId: string,
+): Promise<boolean> {
+  const docRef = doc(db, RESERVATIONS_COLLECTION, date);
+
+  try {
+    await updateDoc(docRef, {
+      [`slots.${slotTime}`]: deleteField(),
+    });
+    return true;
+  } catch (error) {
+    console.error(
+      `[bookingService] Failed to cancel slot ${slotTime} on ${date} for user ${userId}:`,
+      error,
+    );
+    return false;
+  }
+}
+
 function collectUserBookings(
   userId: string,
   snapshot: QuerySnapshot,
@@ -253,4 +270,95 @@ export function subscribeToUserBookings(
   );
 
   return unsubscribe;
+}
+
+// ─── Admin API ────────────────────────────────────────────────────────────────
+
+function buildAdminSlotList(slots: ReservationDocument['slots']): AdminSlotInfo[] {
+  return DEFAULT_SLOT_TIMES.map((time) => {
+    const record = slots?.[time];
+    return {
+      time,
+      // Raw status — no lock-expiry logic. Admin sees true DB state.
+      status: record?.status ?? 'FREE',
+      userId: record?.userId,
+      paymentId: record?.paymentId,
+    };
+  });
+}
+
+export function subscribeToAdminSlots(
+  date: string,
+  callback: (slots: AdminSlotInfo[]) => void,
+): () => void {
+  const docRef = doc(db, RESERVATIONS_COLLECTION, date);
+
+  const unsubscribe = onSnapshot(
+    docRef,
+    (snapshot) => {
+      const data = snapshot.exists()
+        ? (snapshot.data() as ReservationDocument)
+        : undefined;
+      callback(buildAdminSlotList(data?.slots));
+    },
+    (error) => {
+      console.error(`[bookingService] Admin: failed to subscribe to slots for ${date}:`, error);
+      callback(buildAdminSlotList(undefined));
+    },
+  );
+
+  return unsubscribe;
+}
+
+export async function adminBlockSlot(
+  date: string,
+  slotTime: string,
+): Promise<boolean> {
+  const docRef = doc(db, RESERVATIONS_COLLECTION, date);
+  const blockedSlot: SlotRecord = { status: 'BLOCKED' };
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(docRef);
+      if (snapshot.exists()) {
+        transaction.update(docRef, { [`slots.${slotTime}`]: blockedSlot });
+      } else {
+        transaction.set(docRef, { slots: { [slotTime]: blockedSlot } });
+      }
+    });
+    return true;
+  } catch (error) {
+    console.error(`[bookingService] Admin: failed to block slot ${slotTime} on ${date}:`, error);
+    return false;
+  }
+}
+
+export async function adminUnblockSlot(
+  date: string,
+  slotTime: string,
+): Promise<boolean> {
+  const docRef = doc(db, RESERVATIONS_COLLECTION, date);
+
+  try {
+    await updateDoc(docRef, { [`slots.${slotTime}`]: deleteField() });
+    return true;
+  } catch (error) {
+    console.error(`[bookingService] Admin: failed to unblock slot ${slotTime} on ${date}:`, error);
+    return false;
+  }
+}
+
+export async function adminCancelSlot(
+  date: string,
+  slotTime: string,
+): Promise<boolean> {
+  const docRef = doc(db, RESERVATIONS_COLLECTION, date);
+
+  try {
+    await updateDoc(docRef, { [`slots.${slotTime}`]: deleteField() });
+    return true;
+  } catch (error) {
+    console.error(`[bookingService] Admin: failed to cancel slot ${slotTime} on ${date}:`, error);
+    return false;
+  }
 }

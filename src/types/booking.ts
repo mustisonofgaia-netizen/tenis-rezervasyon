@@ -1,6 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 
-export type SlotStatus = 'FREE' | 'LOCKED' | 'CONFIRMED';
+export type SlotStatus = 'FREE' | 'LOCKED' | 'CONFIRMED' | 'BLOCKED';
 
 export type SlotInfo = {
   time: string;
@@ -11,6 +11,14 @@ export type SlotRecord = {
   status: SlotStatus;
   userId?: string;
   lockTimestamp?: Timestamp;
+  paymentId?: string;
+};
+
+// Full slot data exposed to admin views — raw DB state, no expiry logic applied
+export type AdminSlotInfo = {
+  time: string;
+  status: SlotStatus;
+  userId?: string;
   paymentId?: string;
 };
 
