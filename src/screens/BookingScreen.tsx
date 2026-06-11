@@ -21,7 +21,8 @@ import { BookingSummaryModal } from '../components/BookingSummaryModal';
 import { CourtPicker } from '../components/CourtPicker';
 import { HorizontalDayPicker } from '../components/HorizontalDayPicker';
 import { TimeSlotGrid } from '../components/TimeSlotGrid';
-import { IS_MOCK_MODE, TEMP_USER_ID } from '../config/app';
+import { IS_MOCK_MODE } from '../config/app';
+import { useAuth } from '../context/AuthContext';
 import { COURT_IDS, DEFAULT_COURT_ID, getCourtById } from '../config/courts';
 import {
   lockSlot,
@@ -53,6 +54,7 @@ type PaymentSession = {
 
 export function BookingScreen() {
   const navigation = useNavigation<BookingNavProp>();
+  const { uid } = useAuth();
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedCourtId, setSelectedCourtId] = useState<CourtId>(DEFAULT_COURT_ID);
@@ -187,7 +189,7 @@ export function BookingScreen() {
       const secured = await lockSlot(
         session.date,
         session.slotTime,
-        TEMP_USER_ID,
+        uid,
         session.courtId,
       );
 
@@ -212,7 +214,7 @@ export function BookingScreen() {
       const result = await createPaymentSession({
         date: session.date,
         slotTime: session.slotTime,
-        userId: TEMP_USER_ID,
+        userId: uid,
       });
 
       setPaymentUrl(result.data.paymentPageUrl);

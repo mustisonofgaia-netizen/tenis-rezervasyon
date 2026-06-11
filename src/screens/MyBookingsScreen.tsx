@@ -16,12 +16,15 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 
-import { TEMP_USER_ID } from '../config/app';
+import { signOut } from 'firebase/auth';
+import { useAuth } from '../context/AuthContext';
 import { getCourtById } from '../config/courts';
 import { cancelBooking, subscribeToUserBookings } from '../services/bookingService';
+import { auth } from '../services/firebase';
 import type { ConfirmedBooking } from '../types/booking';
 
 const SWIPE_THRESHOLD = 80;   // drag distance that triggers snap-open
@@ -54,16 +57,17 @@ type SwipeableBookingCardProps = {
 };
 
 function SwipeableBookingCard({ booking }: SwipeableBookingCardProps) {
+  const { uid } = useAuth();
   const translateX = useSharedValue(0);
 
   // Step 3: called on JS thread after slide-exit animation finishes
   const doCancel = useCallback(() => {
-    cancelBooking(booking.date, booking.slotTime, TEMP_USER_ID, booking.courtId).catch(() => {
+    cancelBooking(booking.date, booking.slotTime, uid, booking.courtId).catch(() => {
       translateX.value = withSpring(0, SPRING_CONFIG);
       Alert.alert('Hata', 'İptal işlemi başarısız oldu. Lütfen tekrar deneyin.');
     });
     // On success: onSnapshot fires → FadeOut exits the row automatically
-  }, [booking.courtId, booking.date, booking.slotTime, translateX]);
+  }, [booking.courtId, booking.date, booking.slotTime, translateX, uid]);
 
   // Step 2: called on JS thread after card snaps open to -SNAP_OPEN
   const handleCancelAttempt = useCallback(() => {
@@ -187,12 +191,24 @@ function SwipeableBookingCard({ booking }: SwipeableBookingCardProps) {
 }
 
 export function MyBookingsScreen() {
+  const { uid } = useAuth();
   const [bookings, setBookings] = useState<ConfirmedBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const handleSignOut = useCallback(() => {
+    Alert.alert('Çıkış Yap', 'Hesabınızdan çıkmak istediğinize emin misiniz?', [
+      { text: 'Vazgeç', style: 'cancel' },
+      {
+        text: 'Çıkış Yap',
+        style: 'destructive',
+        onPress: () => signOut(auth).catch(() => {}),
+      },
+    ]);
+  }, []);
+
   useEffect(() => {
-    const unsubscribe = subscribeToUserBookings(TEMP_USER_ID, (nextBookings) => {
+    const unsubscribe = subscribeToUserBookings(uid, (nextBookings) => {
       setBookings(nextBookings);
       setIsLoading(false);
       setIsRefreshing(false);
@@ -237,7 +253,16 @@ export function MyBookingsScreen() {
           />
         }
         ListHeaderComponent={
-          <Text style={styles.header}>Rezervasyonlarım</Text>
+          <View style={styles.headerRow}>
+            <Text style={styles.header}>Rezervasyonlarım</Text>
+            <TouchableOpacity
+              onPress={handleSignOut}
+              style={styles.signOutButton}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.signOutText}>Çıkış</Text>
+            </TouchableOpacity>
+          </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -271,12 +296,28 @@ const styles = StyleSheet.create({
   listContentEmpty: {
     flexGrow: 1,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
   header: {
     fontSize: 28,
     fontWeight: '700',
     color: '#111827',
     letterSpacing: -0.5,
-    marginBottom: 20,
+  },
+  signOutButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#FEF2F2',
+  },
+  signOutText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#EF4444',
   },
 
   // — Swipe row —

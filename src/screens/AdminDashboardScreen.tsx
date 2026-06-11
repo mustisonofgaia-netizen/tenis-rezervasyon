@@ -1,3 +1,5 @@
+import { Ionicons } from '@expo/vector-icons';
+import { signOut } from 'firebase/auth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,6 +12,8 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { auth } from '../services/firebase';
 
 import { CourtPicker } from '../components/CourtPicker';
 import { HorizontalDayPicker } from '../components/HorizontalDayPicker';
@@ -292,6 +296,21 @@ export function AdminDashboardScreen() {
     else setEditingPrice(null);
   }, [editingPrice, selectedCourtId]);
 
+  const handleSignOut = useCallback(() => {
+    Alert.alert(
+      'Çıkış Yap',
+      'Yönetici hesabından çıkmak istediğinize emin misiniz?',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Çıkış Yap',
+          style: 'destructive',
+          onPress: () => signOut(auth).catch(() => {}),
+        },
+      ],
+    );
+  }, []);
+
   const selectedCourt = getCourtById(selectedCourtId);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -317,8 +336,17 @@ export function AdminDashboardScreen() {
       >
         {/* ── 1. Header ──────────────────────────────── */}
         <View style={styles.pageHeader}>
-          <Text style={styles.pageTitle}>Kontrol Paneli</Text>
-          <Text style={styles.pageSubtitle}>{FACILITY_NAME}</Text>
+          <View>
+            <Text style={styles.pageTitle}>Kontrol Paneli</Text>
+            <Text style={styles.pageSubtitle}>{FACILITY_NAME}</Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleSignOut}
+            style={styles.signOutBtn}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="log-out-outline" size={22} color="#EF4444" />
+          </TouchableOpacity>
         </View>
 
         {/* ── 2. Tarih ───────────────────────────────── */}
@@ -475,7 +503,18 @@ const styles = StyleSheet.create({
 
   // Header
   pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 24,
+  },
+  signOutBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pageTitle: {
     fontSize: 28,

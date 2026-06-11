@@ -2,16 +2,21 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { AuthProvider } from './src/context/AuthContext';
 import { AdminDashboardScreen } from './src/screens/AdminDashboardScreen';
+import { AuthScreen } from './src/screens/AuthScreen';
 import { BookingScreen } from './src/screens/BookingScreen';
 import { MyBookingsScreen } from './src/screens/MyBookingsScreen';
+import { auth, db } from './src/services/firebase';
 
 // ─── Navigation types ─────────────────────────────────────────────────────────
 
@@ -35,6 +40,13 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// ─── Auth state machine ───────────────────────────────────────────────────────
+
+type AuthState =
+  | { phase: 'loading' }
+  | { phase: 'unauthenticated' }
+  | { phase: 'ready'; uid: string; role: 'ADMIN' | 'CUSTOMER' };
+
 // ─── Custom floating tab bar ──────────────────────────────────────────────────
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -51,7 +63,7 @@ const TAB_LABEL: Record<string, string> = {
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   return (
-    <View style={styles.customTabBarContainer}>
+    <View style={styles.tabBar}>
       {state.routes.map((route, index) => {
         const isFocused = state.index === index;
         const tint = isFocused ? '#22C55E' : '#94A3B8';
@@ -71,16 +83,16 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
           <TouchableOpacity
             key={route.key}
             onPress={onPress}
-            style={styles.customTabItem}
+            style={styles.tabItem}
             activeOpacity={0.7}
           >
             <Ionicons
               name={TAB_ICON[route.name] ?? 'ellipse-outline'}
               size={24}
               color={tint}
-              style={styles.customTabIcon}
+              style={styles.tabIcon}
             />
-            <Text style={[styles.customTabLabel, { color: tint }]}>
+            <Text style={[styles.tabLabel, { color: tint }]}>
               {TAB_LABEL[route.name] ?? route.name}
             </Text>
           </TouchableOpacity>
@@ -118,53 +130,87 @@ function AdminNavigator() {
   );
 }
 
-// ─── Role toggle FAB ─────────────────────────────────────────────────────────
+// ─── Splash loader ────────────────────────────────────────────────────────────
 
-type RoleToggleFABProps = {
-  isAdmin: boolean;
-  onToggle: () => void;
-};
-
-function RoleToggleFAB({ isAdmin, onToggle }: RoleToggleFABProps) {
-  const insets = useSafeAreaInsets();
-
+function SplashLoader() {
   return (
-    <TouchableOpacity
-      activeOpacity={0.85}
-      onPress={onToggle}
-      style={[styles.fab, isAdmin && styles.fabAdmin, { top: insets.top + 8 }]}
-    >
-      <Text style={styles.fabText}>
-        {isAdmin ? '⚙️  Yönetici' : '🎾  Oyuncu'}
-      </Text>
-    </TouchableOpacity>
+    <View style={styles.splash}>
+      <View style={styles.splashLogoCircle}>
+        <Text style={styles.splashEmoji}>🎾</Text>
+      </View>
+      <ActivityIndicator
+        size="large"
+        color="#22C55E"
+        style={styles.splashSpinner}
+      />
+    </View>
   );
 }
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [authState, setAuthState] = useState<AuthState>({ phase: 'loading' });
+  // Ref holds the active Firestore user-doc unsubscribe so we can tear it
+  // down immediately whenever the auth user changes or signs out.
+  const userUnsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    Notifications.requestPermissionsAsync().catch(() => {
-      // Permission denied or unavailable — opt-in, safe to ignore
+    Notifications.requestPermissionsAsync().catch(() => {});
+
+    const authUnsub = onAuthStateChanged(auth, (user) => {
+      // Always tear down any previous user-doc listener first
+      userUnsubRef.current?.();
+      userUnsubRef.current = null;
+
+      if (!user) {
+        setAuthState({ phase: 'unauthenticated' });
+        return;
+      }
+
+      // User is signed in — show spinner while we fetch the role
+      setAuthState({ phase: 'loading' });
+
+      userUnsubRef.current = onSnapshot(
+        doc(db, 'users', user.uid),
+        (snap) => {
+          const role = snap.data()?.role === 'ADMIN' ? 'ADMIN' : 'CUSTOMER';
+          setAuthState({ phase: 'ready', uid: user.uid, role });
+        },
+        () => {
+          // Firestore read error → grant CUSTOMER access rather than blocking
+          setAuthState({ phase: 'ready', uid: user.uid, role: 'CUSTOMER' });
+        },
+      );
     });
+
+    return () => {
+      authUnsub();
+      userUnsubRef.current?.();
+    };
   }, []);
+
+  const renderContent = () => {
+    if (authState.phase === 'loading') return <SplashLoader />;
+    if (authState.phase === 'unauthenticated') return <AuthScreen />;
+
+    return (
+      <AuthProvider uid={authState.uid}>
+        <NavigationContainer>
+          {authState.role === 'ADMIN' ? (
+            <AdminNavigator />
+          ) : (
+            <PlayerNavigator />
+          )}
+        </NavigationContainer>
+      </AuthProvider>
+    );
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <NavigationContainer>
-          {isAdminMode ? <AdminNavigator /> : <PlayerNavigator />}
-        </NavigationContainer>
-
-        {/* Floats above the navigator on all screens */}
-        <RoleToggleFAB
-          isAdmin={isAdminMode}
-          onToggle={() => setIsAdminMode((v) => !v)}
-        />
-
+        {renderContent()}
         <StatusBar style="auto" />
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -174,11 +220,38 @@ export default function App() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  // ── Floating pill tab bar ──────────────────────────────────────────────────
-  // Lives outside the navigator's layout engine so nothing can clip it.
-  customTabBarContainer: {
+  // ── Splash ──────────────────────────────────────────────────────────────────
+  splash: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  splashLogoCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F0FDF4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    shadowColor: '#22C55E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  splashEmoji: {
+    fontSize: 36,
+  },
+  splashSpinner: {
+    marginTop: 8,
+  },
+
+  // ── Floating pill tab bar ────────────────────────────────────────────────────
+  tabBar: {
     position: 'absolute',
-    bottom: 34,
+    bottom: 24,
     left: 24,
     right: 24,
     height: 68,
@@ -193,41 +266,16 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 10,
   },
-  customTabItem: {
+  tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  customTabIcon: {
+  tabIcon: {
     marginBottom: 2,
   },
-  customTabLabel: {
+  tabLabel: {
     fontSize: 11,
     fontWeight: '600',
-  },
-
-  // ── Role toggle FAB ────────────────────────────────────────────────────────
-  fab: {
-    position: 'absolute',
-    right: 16,
-    backgroundColor: '#22C55E',
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    borderRadius: 22,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 8,
-    zIndex: 9999,
-  },
-  fabAdmin: {
-    backgroundColor: '#1D4ED8',
-  },
-  fabText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.2,
   },
 });

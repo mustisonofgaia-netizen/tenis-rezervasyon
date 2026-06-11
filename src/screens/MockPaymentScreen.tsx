@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 
-import { TEMP_USER_ID } from '../config/app';
+import { useAuth } from '../context/AuthContext';
 import { confirmSlot, unlockSlot } from '../services/bookingService';
 import type { CourtId } from '../types/booking';
 
@@ -37,6 +37,7 @@ export function MockPaymentScreen({
   onSuccess,
   onCancel,
 }: MockPaymentScreenProps) {
+  const { uid } = useAuth();
   const [cardNumber, setCardNumber] = useState('5528 7900 0000 0008');
   const [expiry, setExpiry] = useState('12/30');
   const [cvv, setCvv] = useState('123');
@@ -56,7 +57,7 @@ export function MockPaymentScreen({
       await confirmSlot(
         date,
         slotTime,
-        TEMP_USER_ID,
+        uid,
         courtId,
         `mock-payment-${Date.now()}`,
       );
