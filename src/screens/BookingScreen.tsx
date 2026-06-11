@@ -30,6 +30,7 @@ import {
   subscribeToSlots,
 } from '../services/bookingService';
 import { app } from '../services/firebase';
+import { LOCK_DURATION_MS } from '../types/booking';
 import type { CourtId, SlotInfo } from '../types/booking';
 import type { CreatePaymentSessionResponse } from '../types/payment';
 import { MockPaymentScreen } from './MockPaymentScreen';
@@ -66,6 +67,8 @@ export function BookingScreen() {
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [showMockPayment, setShowMockPayment] = useState(false);
   const [paymentSession, setPaymentSession] = useState<PaymentSession | null>(null);
+  // Absolute epoch-ms when the current slot lock expires (lockedAt + 10 min)
+  const [lockExpiresAt, setLockExpiresAt] = useState<number>(0);
 
   // Live prices for all courts — feeds CourtPicker cards + checkout modal simultaneously
   const [livePrices, setLivePrices] = useState<Record<string, number>>({
@@ -99,12 +102,15 @@ export function BookingScreen() {
     return subscribeToSlots(selectedDate, selectedCourtId, setSlots);
   }, [selectedDate, selectedCourtId]);
 
-  // Deselect slot if it becomes unavailable while the user is looking
+  // Deselect slot if it becomes unavailable — but preserve selection if WE hold the lock
   useEffect(() => {
     if (!selectedSlot || isInPaymentFlow || paymentSession) return;
     const found = slots.find((s) => s.time === selectedSlot);
-    if (found && found.status !== 'FREE') setSelectedSlot(null);
-  }, [slots, selectedSlot, isInPaymentFlow, paymentSession]);
+    if (!found || found.status === 'FREE') return;
+    // Keep selected if it's our own lock (re-entry into the payment flow)
+    if (found.status === 'LOCKED' && found.lockedBy === uid) return;
+    setSelectedSlot(null);
+  }, [slots, selectedSlot, isInPaymentFlow, paymentSession, uid]);
 
   useEffect(() => {
     if (paymentUrl) {
@@ -183,10 +189,44 @@ export function BookingScreen() {
     };
 
     setIsModalVisible(false);
+
+    // ── Re-entry: user already holds the lock for this slot ──────────────────
+    const existingSlotInfo = slots.find((s) => s.time === selectedSlot);
+    if (
+      existingSlotInfo?.status === 'LOCKED' &&
+      existingSlotInfo.lockedBy === uid
+    ) {
+      // 1. Trust our local session state first (survives modal close, immune to pending writes)
+      let expiresAt = lockExpiresAt;
+
+      // 2. If state was lost (e.g., app cold restart), rely on Firestore's real server timestamp
+      if (expiresAt === 0 && existingSlotInfo.lockedAt) {
+        expiresAt = existingSlotInfo.lockedAt + LOCK_DURATION_MS;
+      }
+
+      // 3. Ultimate fallback (only hits during first-ever lock attempt if offline)
+      if (expiresAt === 0) {
+        expiresAt = Date.now() + LOCK_DURATION_MS;
+      }
+
+      // 4. Guard against expired locks
+      if (expiresAt <= Date.now()) {
+        Alert.alert('Kilit Süresi Doldu', 'Slot kilidi sona erdi. Lütfen tekrar seçin.');
+        setSelectedSlot(null);
+        return;
+      }
+
+      setLockExpiresAt(expiresAt);
+      setPaymentSession(session);
+      if (IS_MOCK_MODE) setTimeout(() => setShowMockPayment(true), 150);
+      return;
+    }
+
+    // ── Normal path: acquire a fresh lock ────────────────────────────────────
     setIsLocking(true);
 
     try {
-      const secured = await lockSlot(
+      const { secured, lockedAt } = await lockSlot(
         session.date,
         session.slotTime,
         uid,
@@ -195,11 +235,12 @@ export function BookingScreen() {
 
       if (!secured) {
         setIsLocking(false);
-        Alert.alert('Slot Unavailable', 'This slot was just taken by someone else!');
+        Alert.alert('Slot Alındı', 'Bu slot az önce başkası tarafından alındı!');
         setSelectedSlot(null);
         return;
       }
 
+      setLockExpiresAt(lockedAt + LOCK_DURATION_MS);
       setPaymentSession(session);
 
       if (IS_MOCK_MODE) {
@@ -226,15 +267,15 @@ export function BookingScreen() {
 
       if (error instanceof FirebaseError) {
         if (error.code === 'functions/failed-precondition') {
-          Alert.alert('Slot Unavailable', 'This slot was just taken by someone else!');
+          Alert.alert('Slot Alındı', 'Bu slot az önce başkası tarafından alındı!');
           setSelectedSlot(null);
           return;
         }
       }
 
-      Alert.alert('Payment Error', 'Unable to start payment. Please try again.');
+      Alert.alert('Ödeme Hatası', 'Ödeme başlatılamadı. Lütfen tekrar deneyin.');
     }
-  }, [isProcessing, selectedCourtId, selectedDate, selectedSlot]);
+  }, [isProcessing, selectedCourtId, selectedDate, selectedSlot, slots, uid]);
 
   // ─── WebView payment screen ──────────────────────────────────────────────────
 
@@ -336,6 +377,7 @@ export function BookingScreen() {
             key={`${selectedCourtId}_${selectedDate}`}
             slots={slots}
             onSelectSlot={handleSelectSlot}
+            currentUserId={uid}
           />
         ) : (
           <View style={styles.emptySlotHint}>
@@ -392,6 +434,7 @@ export function BookingScreen() {
           courtId={paymentSession.courtId}
           courtName={getCourtById(paymentSession.courtId).name}
           price={courtPrice}
+          lockExpiresAt={lockExpiresAt}
           onSuccess={handleMockPaymentSuccess}
           onCancel={handleMockPaymentCancel}
         />

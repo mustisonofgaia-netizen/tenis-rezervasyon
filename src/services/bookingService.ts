@@ -69,10 +69,19 @@ function isSlotUnavailable(record: SlotRecord | undefined): boolean {
 }
 
 function buildSlotList(slots: ReservationDocument['slots']): SlotInfo[] {
-  return DEFAULT_SLOT_TIMES.map((time) => ({
-    time,
-    status: resolveSlotStatus(slots?.[time]),
-  }));
+  return DEFAULT_SLOT_TIMES.map((time) => {
+    const record = slots?.[time];
+    const status = resolveSlotStatus(record);
+    const info: SlotInfo = { time, status };
+
+    if (status === 'LOCKED') {
+      if (record?.userId) info.lockedBy = record.userId;
+      // lockTimestamp may be null during optimistic pending writes
+      if (record?.lockTimestamp) info.lockedAt = record.lockTimestamp.toMillis();
+    }
+
+    return info;
+  });
 }
 
 function buildAdminSlotList(slots: ReservationDocument['slots']): AdminSlotInfo[] {
@@ -114,16 +123,18 @@ export function subscribeToSlots(
 
 // ─── Player: booking flow ─────────────────────────────────────────────────────
 
+export type LockResult = { secured: boolean; lockedAt: number };
+
 export async function lockSlot(
   date: string,
   slotTime: string,
   userId: string,
   courtId: CourtId,
-): Promise<boolean> {
+): Promise<LockResult> {
   const docRef = doc(db, RESERVATIONS_COLLECTION, reservationDocId(courtId, date));
 
   try {
-    return await runTransaction(db, async (transaction) => {
+    const secured = await runTransaction(db, async (transaction) => {
       const snapshot = await transaction.get(docRef);
       const data = snapshot.exists()
         ? (snapshot.data() as ReservationDocument)
@@ -146,6 +157,9 @@ export async function lockSlot(
 
       return true;
     });
+
+    // Use client-side Date.now() as lockedAt; within ~1 s of the server timestamp.
+    return { secured, lockedAt: secured ? Date.now() : 0 };
   } catch (error) {
     console.error(`[bookingService] Failed to lock slot ${slotTime} on ${courtId}/${date}:`, error);
     throw error;

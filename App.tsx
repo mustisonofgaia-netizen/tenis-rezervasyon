@@ -15,7 +15,9 @@ import { AuthProvider } from './src/context/AuthContext';
 import { AdminDashboardScreen } from './src/screens/AdminDashboardScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { BookingScreen } from './src/screens/BookingScreen';
+import { MatchesScreen } from './src/screens/MatchesScreen';
 import { MyBookingsScreen } from './src/screens/MyBookingsScreen';
+import { ProfileScreen } from './src/screens/ProfileScreen';
 import { auth, db } from './src/services/firebase';
 
 // ─── Navigation types ─────────────────────────────────────────────────────────
@@ -23,6 +25,8 @@ import { auth, db } from './src/services/firebase';
 export type RootTabParamList = {
   Booking: undefined;
   MyBookings: undefined;
+  Matches: undefined;
+  Profile: undefined;
 };
 
 export type AdminTabParamList = {
@@ -52,13 +56,17 @@ type AuthState =
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const TAB_ICON: Record<string, IoniconName> = {
-  Booking: 'calendar-outline',
+  Booking:   'calendar-outline',
   MyBookings: 'bookmark-outline',
+  Matches:   'people-outline',
+  Profile:   'person-outline',
 };
 
 const TAB_LABEL: Record<string, string> = {
-  Booking: 'Rezervasyon',
-  MyBookings: 'Rezervasyonlarım',
+  Booking:   'Rezerve',
+  MyBookings: 'Etkinlik',
+  Matches:   'Lobi',
+  Profile:   'Profil',
 };
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
@@ -115,6 +123,8 @@ function PlayerNavigator() {
     >
       <PlayerTab.Screen name="Booking" component={BookingScreen} />
       <PlayerTab.Screen name="MyBookings" component={MyBookingsScreen} />
+      <PlayerTab.Screen name="Matches" component={MatchesScreen} />
+      <PlayerTab.Screen name="Profile" component={ProfileScreen} />
     </PlayerTab.Navigator>
   );
 }
@@ -275,7 +285,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
 });

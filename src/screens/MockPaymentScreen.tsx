@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,14 @@ import { useAuth } from '../context/AuthContext';
 import { confirmSlot, unlockSlot } from '../services/bookingService';
 import type { CourtId } from '../types/booking';
 
+const COUNTDOWN_TOTAL = 10 * 60; // 600 s — mirrors LOCK_DURATION_MS
+
+function formatCountdown(seconds: number): string {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
 type MockPaymentScreenProps = {
   isVisible: boolean;
   date: string;
@@ -23,6 +31,8 @@ type MockPaymentScreenProps = {
   courtId: CourtId;
   courtName: string;
   price: number;
+  /** Absolute epoch-ms when the Firestore lock expires (lockedAt + LOCK_DURATION_MS) */
+  lockExpiresAt: number;
   onSuccess: () => void;
   onCancel: () => void;
 };
@@ -34,11 +44,53 @@ export function MockPaymentScreen({
   courtId,
   courtName,
   price,
+  lockExpiresAt,
   onSuccess,
   onCancel,
 }: MockPaymentScreenProps) {
   const { uid } = useAuth();
   const [cardNumber, setCardNumber] = useState('5528 7900 0000 0008');
+
+  // ── 10-minute countdown ────────────────────────────────────────────────────
+  const [remainingSeconds, setRemainingSeconds] = useState(COUNTDOWN_TOTAL);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const onCancelRef = useRef(onCancel);
+  useEffect(() => { onCancelRef.current = onCancel; }, [onCancel]);
+
+  useEffect(() => {
+    if (!isVisible || lockExpiresAt <= 0) {
+      setRemainingSeconds(COUNTDOWN_TOTAL);
+      return;
+    }
+
+    const computeRemaining = () =>
+      Math.max(0, Math.round((lockExpiresAt - Date.now()) / 1000));
+
+    // Sync immediately on show
+    setRemainingSeconds(computeRemaining());
+
+    intervalRef.current = setInterval(() => {
+      const secs = computeRemaining();
+      setRemainingSeconds(secs);
+
+      if (secs <= 0) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        // Release the Firestore lock silently
+        unlockSlot(date, slotTime, courtId).catch(() => {});
+        Alert.alert(
+          'Süre Doldu',
+          'Rezervasyon kilidi kaldırıldı. Lütfen tekrar deneyin.',
+          [{ text: 'Tamam', onPress: () => onCancelRef.current() }],
+        );
+      }
+    }, 1000);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [isVisible, lockExpiresAt, date, slotTime, courtId]);
+
+  const isUrgent = remainingSeconds <= 60 && remainingSeconds > 0;
   const [expiry, setExpiry] = useState('12/30');
   const [cvv, setCvv] = useState('123');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -106,6 +158,16 @@ export function MockPaymentScreen({
           <View style={styles.banner}>
             <Text style={styles.bannerTitle}>MOCK TEST MODE</Text>
             <Text style={styles.bannerText}>Gerçek Kart Girmeyiniz</Text>
+          </View>
+
+          {/* ── Countdown timer ───────────────────────────── */}
+          <View style={[styles.timerBanner, isUrgent && styles.timerBannerUrgent]}>
+            <Text style={[styles.timerLabel, isUrgent && styles.timerLabelUrgent]}>
+              ⏳ Slot kilidinin kalan süresi
+            </Text>
+            <Text style={[styles.timerValue, isUrgent && styles.timerValueUrgent]}>
+              {formatCountdown(remainingSeconds)}
+            </Text>
           </View>
 
           <View style={styles.cardPreview}>
@@ -357,5 +419,41 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#EF4444',
+  },
+
+  // ── Countdown timer banner ───────────────────────────────────────────────────
+  timerBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFBEB',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    marginBottom: 20,
+  },
+  timerBannerUrgent: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  timerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#92400E',
+  },
+  timerLabelUrgent: {
+    color: '#991B1B',
+  },
+  timerValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#D97706',
+    letterSpacing: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  timerValueUrgent: {
+    color: '#DC2626',
   },
 });

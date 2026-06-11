@@ -19,6 +19,10 @@ export type CourtConfig = {
 export type SlotInfo = {
   time: string;
   status: SlotStatus;
+  /** uid of the user holding the lock — only present when status === 'LOCKED' */
+  lockedBy?: string;
+  /** epoch-ms timestamp when the lock was written — only present when status === 'LOCKED' */
+  lockedAt?: number;
 };
 
 export type SlotRecord = {
@@ -67,4 +71,4 @@ export const DEFAULT_SLOT_TIMES = [
   '23:00',
 ] as const;
 
-export const LOCK_DURATION_MS = 5 * 60 * 1000;
+export const LOCK_DURATION_MS = 10 * 60 * 1000; // 10 minutes
