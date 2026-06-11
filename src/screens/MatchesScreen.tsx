@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import {
   ActivityIndicator,
   Alert,
@@ -123,7 +124,7 @@ function MatchCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(index * 70).springify().damping(16).stiffness(120)}
+      entering={FadeInDown.delay(index * 70).duration(400).easing(Easing.out(Easing.cubic))}
       style={styles.card}
     >
       {/* ── Skill badge + date ──────────────── */}
@@ -286,6 +287,7 @@ export function MatchesScreen() {
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleJoin = useCallback(
     async (matchId: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       setJoiningId(matchId);
       try {
         await joinMatch(matchId, uid);

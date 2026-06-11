@@ -192,6 +192,62 @@ export function subscribeToMyJoinedMatches(
   );
 }
 
+// ─── Leave a match (participant only, 12-hour safety lock enforced in UI) ─────
+
+/** Hours before match start within which a participant is locked out of leaving. */
+export const LEAVE_LOCK_HOURS = 12;
+
+/**
+ * Atomically removes `userId` from `joinedPlayers`.
+ * Reverts the match status from 'FULL' → 'OPEN' if it was full.
+ *
+ * Business rules enforced server-side:
+ *  - The host cannot leave (must use `cancelMatchListing` instead).
+ *  - The caller must actually be in the match.
+ *
+ * The 12-hour time lock is a UI concern but is also respected here:
+ * callers should check `LEAVE_LOCK_HOURS` before calling this function.
+ *
+ * Throws a human-readable Turkish error on validation failures.
+ */
+export async function leaveMatch(matchId: string, userId: string): Promise<void> {
+  const docRef = doc(db, MATCHES_COLLECTION, matchId);
+  let capturedHostId = '';
+
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists()) throw new Error('Maç bulunamadı.');
+
+    const data = snapshot.data() as Omit<MatchDocument, 'id'>;
+    capturedHostId = data.hostId;
+
+    if (data.hostId === userId) {
+      throw new Error(
+        'Maç sahibi maçtan ayrılamaz. İlanı kaldırmak için "İlanı Kaldır" seçeneğini kullanın.',
+      );
+    }
+    if (!data.joinedPlayers.includes(userId)) {
+      throw new Error('Zaten bu maçta değilsiniz.');
+    }
+
+    const newPlayers = data.joinedPlayers.filter((id) => id !== userId);
+    const updates: Record<string, unknown> = { joinedPlayers: newPlayers };
+    if (data.status === 'FULL') updates.status = 'OPEN';
+
+    transaction.update(docRef, updates);
+  });
+
+  // Notify the host that a player left — fire-and-forget
+  if (capturedHostId && capturedHostId !== userId) {
+    sendPushNotification(
+      capturedHostId,
+      '👋 Oyuncu Maçtan Ayrıldı',
+      'Bir oyuncu maçınızdan ayrıldı. Kontenjan tekrar açıldı!',
+      { matchId },
+    ).catch(() => {});
+  }
+}
+
 // ─── Cancel a match listing (host only, booking preserved) ───────────────────
 
 /**

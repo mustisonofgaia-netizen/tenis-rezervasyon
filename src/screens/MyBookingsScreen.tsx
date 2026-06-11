@@ -1,6 +1,10 @@
+import * as Haptics from 'expo-haptics';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  Easing,
   FadeInDown,
+  FadeInLeft,
+  FadeInRight,
   FadeOut,
   runOnJS,
   useAnimatedStyle,
@@ -8,7 +12,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -41,9 +45,13 @@ const SPRING_CONFIG       = { mass: 0.2, damping: 15, stiffness: 120 } as const;
 const STAGGER_MS          = 70;
 
 // Activity type accent colors
-const ACCENT_PURE    = '#D1D5DB';   // gray    — plain reservation
-const ACCENT_HOSTED  = '#22C55E';   // green   — hosted match listing
-const ACCENT_JOINED  = '#3B82F6';   // blue    — joined as participant
+const ACCENT_PURE   = '#D1D5DB';  // gray  — plain reservation
+const ACCENT_HOSTED = '#22C55E';  // green — hosted match listing
+const ACCENT_JOINED = '#3B82F6';  // blue  — joined as participant
+
+// Segmented control
+const SEG_NEAR_BLACK = '#0F172A';
+const SEG_LIME       = '#DEFF9A';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -91,7 +99,7 @@ function TypeBadge({ kind }: { kind: ActivityKind }) {
 // ─── Swipeable booking card ───────────────────────────────────────────────────
 
 type SwipeableBookingCardProps = {
-  booking: ConfirmedBooking;
+  booking:    ConfirmedBooking;
   onFindPlayers: (booking: ConfirmedBooking) => void;
   onViewMatch:   (match: MatchDocument) => void;
   activeMatch:   MatchDocument | null;
@@ -108,7 +116,7 @@ function SwipeableBookingCard({
   const { uid }    = useAuth();
   const translateX = useSharedValue(0);
 
-  const accentColor = activeMatch ? ACCENT_HOSTED : ACCENT_PURE;
+  const accentColor  = activeMatch ? ACCENT_HOSTED : ACCENT_PURE;
   const activityKind: ActivityKind = activeMatch ? 'hosted' : 'pure';
 
   const doCancel = useCallback(() => {
@@ -171,7 +179,7 @@ function SwipeableBookingCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(entryDelay).springify().mass(0.5).damping(18)}
+      entering={FadeInDown.delay(entryDelay).duration(400).easing(Easing.out(Easing.cubic))}
       exiting={FadeOut.duration(280)}
       style={styles.swipeRow}
     >
@@ -185,8 +193,6 @@ function SwipeableBookingCard({
 
       <GestureDetector gesture={pan}>
         <Animated.View style={[styles.card, { borderLeftColor: accentColor }, cardStyle]}>
-
-          {/* Activity type badge */}
           <TypeBadge kind={activityKind} />
 
           <View style={styles.cardHeader}>
@@ -207,7 +213,6 @@ function SwipeableBookingCard({
             </View>
           </View>
 
-          {/* Find-players / active-listing CTA */}
           <View style={styles.cardFooter}>
             {activeMatch ? (
               <TouchableOpacity
@@ -251,11 +256,10 @@ function JoinedMatchCard({ match, onViewDetails, entryDelay }: JoinedMatchCardPr
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(entryDelay).springify().mass(0.5).damping(18)}
+      entering={FadeInDown.delay(entryDelay).duration(400).easing(Easing.out(Easing.cubic))}
       style={styles.joinedCardWrapper}
     >
       <TouchableOpacity activeOpacity={0.78} onPress={onViewDetails} style={styles.joinedCard}>
-        {/* Activity type badge */}
         <TypeBadge kind="joined" />
 
         <View style={styles.cardHeader}>
@@ -291,19 +295,70 @@ function JoinedMatchCard({ match, onViewDetails, entryDelay }: JoinedMatchCardPr
   );
 }
 
+// ─── Segmented Control ────────────────────────────────────────────────────────
+
+const TABS = ['Rezervasyonlarım', 'Katıldıklarım'] as const;
+
+type SegmentedControlProps = {
+  activeIndex: number;
+  onChange: (index: number) => void;
+  counts: [number, number];
+};
+
+function SegmentedControl({ activeIndex, onChange, counts }: SegmentedControlProps) {
+  return (
+    <View style={styles.segWrapper}>
+      {TABS.map((label, i) => {
+        const isActive = i === activeIndex;
+        return (
+          <TouchableOpacity
+            key={label}
+            onPress={() => onChange(i)}
+            style={[styles.segTab, isActive && styles.segTabActive]}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.segTabText, isActive && styles.segTabTextActive]}>
+              {label}
+            </Text>
+            {counts[i] > 0 && (
+              <View style={[styles.segCount, isActive && styles.segCountActive]}>
+                <Text style={[styles.segCountText, isActive && styles.segCountTextActive]}>
+                  {counts[i]}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export function MyBookingsScreen() {
   const { uid } = useAuth();
 
+  // ── Tab navigation ───────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState(0);
+  const prevTabRef = useRef(0);
+
+  const handleTabChange = useCallback((tab: number) => {
+    if (tab === activeTab) return;
+    prevTabRef.current = activeTab;
+    setActiveTab(tab);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+  }, [activeTab]);
+
+  // ── Data state ───────────────────────────────────────────────────────────
   const [bookings,      setBookings]      = useState<ConfirmedBooking[]>([]);
   const [joinedMatches, setJoinedMatches] = useState<MatchDocument[]>([]);
   const [isLoading,     setIsLoading]     = useState(true);
   const [isRefreshing,  setIsRefreshing]  = useState(false);
 
+  // ── Modal state ──────────────────────────────────────────────────────────
   const [selectedBookingForMatch, setSelectedBookingForMatch] =
     useState<ConfirmedBooking | null>(null);
-
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
   // ── Derived data ─────────────────────────────────────────────────────────
@@ -327,23 +382,26 @@ export function MyBookingsScreen() {
     };
   }, [selectedMatch]);
 
-  const activities = useMemo((): ActivityItem[] => {
-    const bookingItems: ActivityItem[] = bookings.map((b) => ({
+  // ── Tab 0: Rezervasyonlarım (own bookings + hosted match listings) ────────
+  const reservationsTabItems = useMemo((): ActivityItem[] =>
+    bookings.map((b) => ({
       kind:    'booking',
       id:      `booking-${b.id}`,
       booking: b,
       match:   hostedMatchByBookingId.get(b.id) ?? null,
-    }));
+    })),
+  [bookings, hostedMatchByBookingId]);
 
-    const joinedItems: ActivityItem[] = joinedMatches
+  // ── Tab 1: Katıldıklarım (joined as participant, not host) ───────────────
+  const joinedTabItems = useMemo((): ActivityItem[] =>
+    joinedMatches
       .filter((m) => m.hostId !== uid)
-      .map((m) => ({ kind: 'joinedMatch', id: `match-${m.id}`, match: m }));
+      .map((m) => ({ kind: 'joinedMatch', id: `match-${m.id}`, match: m })),
+  [joinedMatches, uid]);
 
-    return [...bookingItems, ...joinedItems];
-  }, [bookings, hostedMatchByBookingId, joinedMatches, uid]);
+  const activeItems = activeTab === 0 ? reservationsTabItems : joinedTabItems;
 
   // ── Subscriptions ─────────────────────────────────────────────────────────
-
   useEffect(() => {
     return subscribeToUserBookings(uid, (next) => {
       setBookings(next);
@@ -356,7 +414,6 @@ export function MyBookingsScreen() {
   useEffect(() => subscribeToMyJoinedMatches(uid, setJoinedMatches), [uid]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
-
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     setTimeout(() => setIsRefreshing(false), 700);
@@ -378,58 +435,91 @@ export function MyBookingsScreen() {
     );
   }
 
+  // Direction for slide-in animation
+  const listEntering = activeTab > prevTabRef.current
+    ? FadeInRight.duration(320).easing(Easing.out(Easing.cubic))
+    : FadeInLeft.duration(320).easing(Easing.out(Easing.cubic));
+
+  const emptyMessages = [
+    {
+      title: 'Henüz rezervasyon yok',
+      body:  "Bir kort rezerve etmek için 'Keşfet' sekmesini kullanın.",
+    },
+    {
+      title: 'Henüz katıldığınız maç yok',
+      body:  "Lobi sekmesinden açık maçlara katılabilirsiniz.",
+    },
+  ] as const;
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <FlatList<ActivityItem>
-        data={activities}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.listContent,
-          activities.length === 0 && styles.listContentEmpty,
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor="#22C55E"
-            colors={['#22C55E']}
-          />
-        }
-        ListHeaderComponent={
-          <Text style={styles.header}>Etkinliklerim</Text>
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Henüz etkinlik yok</Text>
-            <Text style={styles.emptyText}>
-              Kort rezervasyonu yap veya Lobi'den bir maça katıl.
-            </Text>
-          </View>
-        }
-        renderItem={({ item, index }) => {
-          const delay = index * STAGGER_MS;
-          if (item.kind === 'booking') {
+      {/* ── Static header — never re-mounts ────────────────────────────── */}
+      <View style={styles.staticHeader}>
+        <Text style={styles.header}>Etkinliklerim</Text>
+        <SegmentedControl
+          activeIndex={activeTab}
+          onChange={handleTabChange}
+          counts={[reservationsTabItems.length, joinedTabItems.length]}
+        />
+      </View>
+
+      {/* ── Animated list — re-mounts on tab switch to trigger enter anim ── */}
+      <Animated.View
+        key={`tab-${activeTab}`}
+        entering={listEntering}
+        style={styles.listWrapper}
+      >
+        <FlatList<ActivityItem>
+          data={activeItems}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[
+            styles.listContent,
+            activeItems.length === 0 && styles.listContentEmpty,
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor="#22C55E"
+              colors={['#22C55E']}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>
+                {emptyMessages[activeTab]?.title}
+              </Text>
+              <Text style={styles.emptyText}>
+                {emptyMessages[activeTab]?.body}
+              </Text>
+            </View>
+          }
+          renderItem={({ item, index }) => {
+            const delay = index * STAGGER_MS;
+            if (item.kind === 'booking') {
+              return (
+                <SwipeableBookingCard
+                  booking={item.booking}
+                  onFindPlayers={setSelectedBookingForMatch}
+                  onViewMatch={openMatchDetails}
+                  activeMatch={item.match}
+                  entryDelay={delay}
+                />
+              );
+            }
             return (
-              <SwipeableBookingCard
-                booking={item.booking}
-                onFindPlayers={setSelectedBookingForMatch}
-                onViewMatch={openMatchDetails}
-                activeMatch={item.match}
+              <JoinedMatchCard
+                match={item.match}
+                onViewDetails={() => openMatchDetails(item.match)}
                 entryDelay={delay}
               />
             );
-          }
-          return (
-            <JoinedMatchCard
-              match={item.match}
-              onViewDetails={() => openMatchDetails(item.match)}
-              entryDelay={delay}
-            />
-          );
-        }}
-      />
+          }}
+        />
+      </Animated.View>
 
+      {/* ── Modals ────────────────────────────────────────────────────────── */}
       {selectedBookingForMatch && (
         <PublishMatchModal
           isVisible
@@ -453,11 +543,78 @@ export function MyBookingsScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F9FAFB' },
+  safeArea:        { flex: 1, backgroundColor: '#F9FAFB' },
   loaderContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  listContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 120 },
+  listWrapper:     { flex: 1 },
+
+  // ── Static header + segmented control ────────────────────────────────────
+  staticHeader: {
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 4,
+    backgroundColor: '#F9FAFB',
+  },
+  header: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.5,
+    marginBottom: 16,
+  },
+
+  // ── Segmented control ─────────────────────────────────────────────────────
+  segWrapper: {
+    flexDirection: 'row',
+    backgroundColor: SEG_NEAR_BLACK,
+    borderRadius: 18,
+    padding: 5,
+    marginBottom: 12,
+  },
+  segTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 14,
+    gap: 6,
+  },
+  segTabActive: {
+    backgroundColor: SEG_LIME,
+  },
+  segTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.1,
+  },
+  segTabTextActive: {
+    color: SEG_NEAR_BLACK,
+  },
+  segCount: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  segCountActive: {
+    backgroundColor: 'rgba(15, 23, 42, 0.14)',
+  },
+  segCountText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#94A3B8',
+  },
+  segCountTextActive: {
+    color: SEG_NEAR_BLACK,
+  },
+
+  // ── List ─────────────────────────────────────────────────────────────────
+  listContent:      { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120 },
   listContentEmpty: { flexGrow: 1 },
-  header: { fontSize: 28, fontWeight: '700', color: '#111827', letterSpacing: -0.5, marginBottom: 20 },
 
   // ── Activity type badge ───────────────────────────────────────────────────
   typeBadge: {
@@ -475,7 +632,7 @@ const styles = StyleSheet.create({
   },
 
   // ── Swipe row ─────────────────────────────────────────────────────────────
-  swipeRow: { marginBottom: 14 },
+  swipeRow:    { marginBottom: 14 },
   deleteAction: {
     position: 'absolute', top: 0, right: 0, bottom: 0,
     width: DELETE_ACTION_WIDTH,
@@ -484,8 +641,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   deleteActionContent: { alignItems: 'center', gap: 5 },
-  deleteActionIcon:  { fontSize: 22 },
-  deleteActionLabel: { fontSize: 11, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.4 },
+  deleteActionIcon:    { fontSize: 22 },
+  deleteActionLabel:   { fontSize: 11, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.4 },
 
   // ── Base card (booking, swipeable) ────────────────────────────────────────
   card: {
@@ -494,7 +651,6 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    // Left accent border (color set dynamically)
     borderLeftWidth: 4,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
@@ -503,7 +659,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
-  // ── Joined-match card wrapper + card ─────────────────────────────────────
+  // ── Joined-match card ─────────────────────────────────────────────────────
   joinedCardWrapper: { marginBottom: 14 },
   joinedCard: {
     backgroundColor: '#FFFFFF',
@@ -530,13 +686,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#DCFCE7', borderRadius: 999,
     paddingHorizontal: 10, paddingVertical: 6,
   },
-  badgeFull:        { backgroundColor: '#FEF3C7' },
-  badgeText:        { fontSize: 12, fontWeight: '700', color: '#15803D', letterSpacing: 0.3 },
-  badgeTextFull:    { color: '#92400E' },
-  cardBody:         { gap: 12 },
-  infoBlock:        { gap: 4 },
-  infoLabel:        { fontSize: 12, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.6 },
-  infoValue:        { fontSize: 15, fontWeight: '600', color: '#374151' },
+  badgeFull:     { backgroundColor: '#FEF3C7' },
+  badgeText:     { fontSize: 12, fontWeight: '700', color: '#15803D', letterSpacing: 0.3 },
+  badgeTextFull: { color: '#92400E' },
+  cardBody:      { gap: 12 },
+  infoBlock:     { gap: 4 },
+  infoLabel:     { fontSize: 12, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.6 },
+  infoValue:     { fontSize: 15, fontWeight: '600', color: '#374151' },
 
   // ── Card footer (CTA row) ─────────────────────────────────────────────────
   cardFooter: {
@@ -546,19 +702,19 @@ const styles = StyleSheet.create({
   findPlayersButton: {
     backgroundColor: '#F0FDF4', borderRadius: 12, paddingVertical: 11, alignItems: 'center',
   },
-  findPlayersText: { fontSize: 13, fontWeight: '700', color: '#15803D', letterSpacing: 0.2 },
+  findPlayersText:  { fontSize: 13, fontWeight: '700', color: '#15803D', letterSpacing: 0.2 },
   activeMatchBadge: {
     backgroundColor: '#FFFBEB', borderRadius: 12,
     paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center',
     borderWidth: 1, borderColor: '#FDE68A',
   },
-  activeMatchText: { fontSize: 13, fontWeight: '700', color: '#92400E', letterSpacing: 0.1 },
-  joinedBadgeRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  joinedBadgeText: { fontSize: 13, fontWeight: '600', color: ACCENT_JOINED },
-  viewDetailsHint: { fontSize: 12, fontWeight: '600', color: '#93C5FD' },
+  activeMatchText:  { fontSize: 13, fontWeight: '700', color: '#92400E', letterSpacing: 0.1 },
+  joinedBadgeRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  joinedBadgeText:  { fontSize: 13, fontWeight: '600', color: ACCENT_JOINED },
+  viewDetailsHint:  { fontSize: 12, fontWeight: '600', color: '#93C5FD' },
 
   // ── Empty state ───────────────────────────────────────────────────────────
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, paddingHorizontal: 24 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8, textAlign: 'center' },
   emptyText:  { fontSize: 14, lineHeight: 22, color: '#6B7280', textAlign: 'center' },
 });

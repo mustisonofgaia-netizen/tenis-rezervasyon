@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { signOut } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
+import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import {
   Alert,
   SafeAreaView,
@@ -94,10 +96,12 @@ export function ProfileScreen() {
   const rank = getRankInfo(stats.eloRating);
 
   const handleChangePassword = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     Alert.alert('Şifremi Değiştir', 'Yakında aktif edilecek.');
   }, []);
 
   const handleSignOut = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     Alert.alert(
       'Çıkış Yap',
       'Hesabınızdan çıkmak istediğinize emin misiniz?',
@@ -119,7 +123,10 @@ export function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Hero header ─────────────────────────── */}
-        <View style={styles.hero}>
+        <Animated.View
+          entering={FadeInDown.delay(0).duration(420).easing(Easing.out(Easing.cubic))}
+          style={styles.hero}
+        >
           <View style={[styles.avatarCircle, { backgroundColor: color }]}>
             <Text style={styles.avatarInitial}>{initial}</Text>
           </View>
@@ -133,10 +140,13 @@ export function ProfileScreen() {
             <Text style={styles.rankEmoji}>{rank.emoji}</Text>
             <Text style={[styles.rankLabel, { color: rank.color }]}>{rank.label}</Text>
           </View>
-        </View>
+        </Animated.View>
 
         {/* ── Stats row ────────────────────────────── */}
-        <View style={styles.statsRow}>
+        <Animated.View
+          entering={FadeInDown.delay(100).duration(420).easing(Easing.out(Easing.cubic))}
+          style={styles.statsRow}
+        >
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{stats.eloRating}</Text>
             <Text style={styles.statLabel}>Elo Puanı</Text>
@@ -149,28 +159,35 @@ export function ProfileScreen() {
             <Text style={styles.statValue}>{stats.matchesPlayed}</Text>
             <Text style={styles.statLabel}>Maç</Text>
           </View>
-        </View>
+        </Animated.View>
 
         {/* ── Settings group ──────────────────────── */}
-        <Text style={styles.sectionLabel}>Hesap Ayarları</Text>
-        <View style={styles.settingsGroup}>
-          <TouchableOpacity
-            style={styles.settingsRow}
-            activeOpacity={0.7}
-            onPress={handleChangePassword}
-          >
-            <View style={styles.settingsRowLeft}>
-              <View style={styles.settingsIconWrapper}>
-                <Ionicons name="key-outline" size={17} color="#6B7280" />
+        <Animated.View
+          entering={FadeInDown.delay(180).duration(420).easing(Easing.out(Easing.cubic))}
+        >
+          <Text style={styles.sectionLabel}>Hesap Ayarları</Text>
+          <View style={styles.settingsGroup}>
+            <TouchableOpacity
+              style={styles.settingsRow}
+              activeOpacity={0.7}
+              onPress={handleChangePassword}
+            >
+              <View style={styles.settingsRowLeft}>
+                <View style={styles.settingsIconWrapper}>
+                  <Ionicons name="key-outline" size={17} color="#6B7280" />
+                </View>
+                <Text style={styles.settingsRowText}>Şifremi Değiştir</Text>
               </View>
-              <Text style={styles.settingsRowText}>Şifremi Değiştir</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
-          </TouchableOpacity>
-        </View>
+              <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
 
         {/* ── Sign-out ─────────────────────────────── */}
-        <View style={styles.signOutSection}>
+        <Animated.View
+          entering={FadeInDown.delay(260).duration(420).easing(Easing.out(Easing.cubic))}
+          style={styles.signOutSection}
+        >
           <TouchableOpacity
             style={styles.signOutButton}
             activeOpacity={0.8}
@@ -179,7 +196,7 @@ export function ProfileScreen() {
             <Ionicons name="log-out-outline" size={18} color="#EF4444" style={{ marginRight: 8 }} />
             <Text style={styles.signOutText}>Çıkış Yap</Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );

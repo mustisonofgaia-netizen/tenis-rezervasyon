@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
+import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import {
   Image,
   SafeAreaView,
@@ -100,15 +102,23 @@ export function ExploreScreen() {
         </View>
 
         {/* ── Club feed ──────────────────────────────── */}
-        {CLUBS.map((club) => (
-          <ClubCard
+        {CLUBS.map((club, index) => (
+          <Animated.View
             key={club.id}
-            club={club}
-            courts={getCourtsByClubId(club.id)}
-            onPress={() =>
-              navigation.navigate('BookingScreen', { clubId: club.id })
-            }
-          />
+            entering={FadeInDown
+              .delay(index * 100)
+              .duration(420)
+              .easing(Easing.out(Easing.cubic))}
+          >
+            <ClubCard
+              club={club}
+              courts={getCourtsByClubId(club.id)}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                navigation.navigate('BookingScreen', { clubId: club.id });
+              }}
+            />
+          </Animated.View>
         ))}
       </ScrollView>
     </SafeAreaView>

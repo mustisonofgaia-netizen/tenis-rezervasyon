@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './src/context/AuthContext';
+import * as Haptics from 'expo-haptics';
 import { registerForPushNotificationsAsync } from './src/services/notificationService';
 import { AdminDashboardScreen } from './src/screens/AdminDashboardScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
@@ -75,6 +76,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         const tint = isFocused ? '#22C55E' : '#94A3B8';
 
         const onPress = () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
           const event = navigation.emit({
             type: 'tabPress',
             target: route.key,

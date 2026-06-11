@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -22,7 +23,12 @@ import {
 } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
-import { cancelMatchListing, removePlayerFromMatch } from '../services/matchService';
+import {
+  cancelMatchListing,
+  LEAVE_LOCK_HOURS,
+  leaveMatch,
+  removePlayerFromMatch,
+} from '../services/matchService';
 import { submitMatchScore, updateMatchScore } from '../services/scoreService';
 import {
   avatarColor,
@@ -175,6 +181,7 @@ export function MatchDetailsModal({
   const [isSubmitting,     setIsSubmitting]     = useState(false);
   const [isEditingScore,   setIsEditingScore]   = useState(false);
   const [isCancelling,     setIsCancelling]     = useState(false);
+  const [isLeaving,        setIsLeaving]        = useState(false);
 
   const isHost     = match.hostId === uid;
   const isFull     = match.status === 'FULL';
@@ -182,15 +189,23 @@ export function MatchDetailsModal({
   const skillLabel = SKILL_LABEL[match.skillLevel];
 
   // ── Past/future detection ────────────────────────────────────────────────
-  const isMatchInPast = useMemo(() => {
+  const { isMatchInPast, hoursUntilMatch } = useMemo(() => {
     const [year, month, day] = match.date.split('-').map(Number);
     const [hour, minute]     = match.slotTime.split(':').map(Number);
-    return new Date(year, month - 1, day, hour, minute).getTime() < Date.now();
+    const matchMs = new Date(year, month - 1, day, hour, minute).getTime();
+    return {
+      isMatchInPast:   matchMs < Date.now(),
+      hoursUntilMatch: (matchMs - Date.now()) / (1000 * 60 * 60),
+    };
   }, [match.date, match.slotTime]);
 
   const showScoreEntry   = (isMatchInPast && !match.isScored && isHost && match.joinedPlayers.length >= 2) || isEditingScore;
   const showScoreResult  = !!match.isScored && !isEditingScore;
   const showCancelButton = !isMatchInPast && isHost && !match.isScored;
+
+  // Participant (non-host) can leave; locked within 12 h of start
+  const showLeaveButton = !isHost && !isMatchInPast && match.joinedPlayers.includes(uid);
+  const isLeaveLocked   = hoursUntilMatch < LEAVE_LOCK_HOURS;
 
   // ── Derived score string ──────────────────────────────────────────────────
   const scoreString = sets.map((s) => `${s.hostScore}-${s.opponentScore}`).join(', ');
@@ -204,6 +219,7 @@ export function MatchDetailsModal({
     nextSetId.current = 1;
     setIsSubmitting(false);
     setIsEditingScore(false);
+    setIsLeaving(false);
   }, [match.id]);
 
   // ── Reset editing flag when modal closes ──────────────────────────────────
@@ -313,6 +329,42 @@ export function MatchDetailsModal({
     );
   }, [match.id, uid, onClose]);
 
+  // ── Leave match (participant only) ────────────────────────────────────────
+  const handleLeaveMatch = useCallback(() => {
+    if (isLeaveLocked) {
+      Alert.alert(
+        '🚨 Güvenlik Kilidi',
+        `Maça ${LEAVE_LOCK_HOURS} saatten az kaldığı için ayrılamazsınız. ` +
+        'Lütfen acil durumlar için ev sahibiyle iletişime geçin.',
+        [{ text: 'Anladım', style: 'default' }],
+      );
+      return;
+    }
+    Alert.alert(
+      'Maçtan Ayrıl',
+      'Bu maçtan ayrılmak istediğinize emin misiniz?\nKontenjan tekrar açılacaktır.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Evet, Ayrıl',
+          style: 'destructive',
+          onPress: async () => {
+            setIsLeaving(true);
+            try {
+              await leaveMatch(match.id, uid);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              onClose();
+            } catch (error) {
+              Alert.alert('Hata', error instanceof Error ? error.message : 'Ayrılma işlemi başarısız.');
+            } finally {
+              setIsLeaving(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [isLeaveLocked, match.id, uid, onClose]);
+
   // ── Submit / update score ─────────────────────────────────────────────────
   const handleSubmitScore = useCallback(async () => {
     if (!selectedWinnerId || !canSave) return;
@@ -326,6 +378,7 @@ export function MatchDetailsModal({
       } else {
         await submitMatchScore(match.id, scoreString, selectedWinnerId, loserIds);
       }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       Alert.alert('🏆 Skor Kaydedildi!', `Maç skoru: ${scoreString}`);
       setIsEditingScore(false);
     } catch (error) {
@@ -606,6 +659,56 @@ export function MatchDetailsModal({
                 </Text>
               </Animated.View>
             )}
+
+            {/* ── Leave match (future, participant only) ── */}
+            {showLeaveButton && (
+              <Animated.View
+                entering={FadeIn.duration(300)}
+                layout={LinearTransition.springify()}
+              >
+                <View style={styles.cancelDivider} />
+                <TouchableOpacity
+                  style={[
+                    styles.leaveButton,
+                    isLeaveLocked && styles.leaveButtonLocked,
+                  ]}
+                  onPress={handleLeaveMatch}
+                  disabled={isLeaving}
+                  activeOpacity={0.8}
+                >
+                  {isLeaving ? (
+                    <ActivityIndicator
+                      color={isLeaveLocked ? '#9CA3AF' : '#F97316'}
+                      size="small"
+                    />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name={isLeaveLocked ? 'lock-closed-outline' : 'exit-outline'}
+                        size={16}
+                        color={isLeaveLocked ? '#9CA3AF' : '#F97316'}
+                        style={{ marginRight: 7 }}
+                      />
+                      <Text
+                        style={[
+                          styles.leaveButtonText,
+                          isLeaveLocked && styles.leaveButtonTextLocked,
+                        ]}
+                      >
+                        {isLeaveLocked
+                          ? `🔒 Maçtan Ayrıl (Kilitli)`
+                          : 'Maçtan Ayrıl'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <Text style={styles.leaveHint}>
+                  {isLeaveLocked
+                    ? `Maça ${LEAVE_LOCK_HOURS} saatten az kaldığı için ayrılamazsınız`
+                    : 'Ayrılmanız durumunda kontenjan tekrar açılacaktır'}
+                </Text>
+              </Animated.View>
+            )}
           </ScrollView>
         </Animated.View>
       </View>
@@ -809,4 +912,20 @@ const styles = StyleSheet.create({
   },
   cancelListingText: { fontSize: 14, fontWeight: '700', color: '#EF4444', letterSpacing: 0.2 },
   cancelListingHint: { fontSize: 12, color: '#9CA3AF', textAlign: 'center', lineHeight: 18, marginBottom: 8 },
+
+  // ── Leave match ──────────────────────────────────────────────────────────
+  leaveButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 14, borderRadius: 16,
+    borderWidth: 1.5, borderColor: '#FED7AA',
+    backgroundColor: '#FFF7ED',
+    marginBottom: 10,
+  },
+  leaveButtonLocked: {
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+  },
+  leaveButtonText: { fontSize: 14, fontWeight: '700', color: '#F97316', letterSpacing: 0.2 },
+  leaveButtonTextLocked: { color: '#9CA3AF' },
+  leaveHint: { fontSize: 12, color: '#9CA3AF', textAlign: 'center', lineHeight: 18, marginBottom: 8 },
 });
