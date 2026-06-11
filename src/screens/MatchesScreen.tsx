@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
-import { COURTS } from '../config/courts';
+import { resolveFullCourtLabel } from '../config/data';
 import {
   joinMatch,
   removePlayerFromMatch,
@@ -56,8 +56,7 @@ function formatMatchDate(dateKey: string, slotTime: string): string {
 }
 
 function resolveCourtLabel(courtId: string): string {
-  const court = COURTS.find((c) => c.id === courtId);
-  return court ? `${court.name} · ${court.surface}` : courtId;
+  return resolveFullCourtLabel(courtId);
 }
 
 // ─── Match card ───────────────────────────────────────────────────────────────

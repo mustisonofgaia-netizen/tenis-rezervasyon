@@ -1,6 +1,7 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -15,19 +16,14 @@ import { AuthProvider } from './src/context/AuthContext';
 import { AdminDashboardScreen } from './src/screens/AdminDashboardScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { BookingScreen } from './src/screens/BookingScreen';
+import { ExploreScreen } from './src/screens/ExploreScreen';
 import { MatchesScreen } from './src/screens/MatchesScreen';
 import { MyBookingsScreen } from './src/screens/MyBookingsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { auth, db } from './src/services/firebase';
+import type { ExploreStackParamList, RootTabParamList } from './src/navigation/types';
 
-// ─── Navigation types ─────────────────────────────────────────────────────────
-
-export type RootTabParamList = {
-  Booking: undefined;
-  MyBookings: undefined;
-  Matches: undefined;
-  Profile: undefined;
-};
+export type { RootTabParamList, ExploreStackParamList };
 
 export type AdminTabParamList = {
   AdminDashboard: undefined;
@@ -56,17 +52,17 @@ type AuthState =
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const TAB_ICON: Record<string, IoniconName> = {
-  Booking:   'calendar-outline',
+  Booking:    'compass-outline',
   MyBookings: 'bookmark-outline',
-  Matches:   'people-outline',
-  Profile:   'person-outline',
+  Matches:    'people-outline',
+  Profile:    'person-outline',
 };
 
 const TAB_LABEL: Record<string, string> = {
-  Booking:   'Rezerve',
+  Booking:    'Keşfet',
   MyBookings: 'Etkinlik',
-  Matches:   'Lobi',
-  Profile:   'Profil',
+  Matches:    'Lobi',
+  Profile:    'Profil',
 };
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
@@ -110,10 +106,23 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   );
 }
 
-// ─── Navigators ───────────────────────────────────────────────────────────────
+// ─── Explore stack (Club discovery → Court booking) ───────────────────────────
+
+const ExploreStack = createNativeStackNavigator<ExploreStackParamList>();
+
+function ExploreNavigator() {
+  return (
+    <ExploreStack.Navigator screenOptions={{ headerShown: false }}>
+      <ExploreStack.Screen name="ExploreHome" component={ExploreScreen} />
+      <ExploreStack.Screen name="BookingScreen" component={BookingScreen} />
+    </ExploreStack.Navigator>
+  );
+}
+
+// ─── Root tab navigator ───────────────────────────────────────────────────────
 
 const PlayerTab = createBottomTabNavigator<RootTabParamList>();
-const AdminTab = createBottomTabNavigator<AdminTabParamList>();
+const AdminTab  = createBottomTabNavigator<AdminTabParamList>();
 
 function PlayerNavigator() {
   return (
@@ -121,10 +130,10 @@ function PlayerNavigator() {
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >
-      <PlayerTab.Screen name="Booking" component={BookingScreen} />
+      <PlayerTab.Screen name="Booking"    component={ExploreNavigator} />
       <PlayerTab.Screen name="MyBookings" component={MyBookingsScreen} />
-      <PlayerTab.Screen name="Matches" component={MatchesScreen} />
-      <PlayerTab.Screen name="Profile" component={ProfileScreen} />
+      <PlayerTab.Screen name="Matches"    component={MatchesScreen} />
+      <PlayerTab.Screen name="Profile"    component={ProfileScreen} />
     </PlayerTab.Navigator>
   );
 }

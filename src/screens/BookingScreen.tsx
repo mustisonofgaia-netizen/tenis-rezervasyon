@@ -1,9 +1,11 @@
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { useNavigation } from '@react-navigation/native';
+import type { CompositeNavigationProp, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Notifications from 'expo-notifications';
 import { FirebaseError } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import {
   ActivityIndicator,
@@ -22,8 +24,9 @@ import { CourtPicker } from '../components/CourtPicker';
 import { HorizontalDayPicker } from '../components/HorizontalDayPicker';
 import { TimeSlotGrid } from '../components/TimeSlotGrid';
 import { IS_MOCK_MODE } from '../config/app';
+import { getClubById, getCourtById, getCourtsByClubId } from '../config/data';
 import { useAuth } from '../context/AuthContext';
-import { COURT_IDS, DEFAULT_COURT_ID, getCourtById } from '../config/courts';
+import type { ExploreStackParamList, RootTabParamList } from '../navigation/types';
 import {
   lockSlot,
   subscribeToCourtPrice,
@@ -35,10 +38,10 @@ import type { CourtId, SlotInfo } from '../types/booking';
 import type { CreatePaymentSessionResponse } from '../types/payment';
 import { MockPaymentScreen } from './MockPaymentScreen';
 
-type BookingNavProp = BottomTabNavigationProp<{
-  Booking: undefined;
-  MyBookings: undefined;
-}>;
+type BookingNavProp = CompositeNavigationProp<
+  NativeStackNavigationProp<ExploreStackParamList, 'BookingScreen'>,
+  BottomTabNavigationProp<RootTabParamList>
+>;
 
 const functions = getFunctions(app);
 
@@ -55,10 +58,18 @@ type PaymentSession = {
 
 export function BookingScreen() {
   const navigation = useNavigation<BookingNavProp>();
-  const { uid } = useAuth();
+  const { uid }    = useAuth();
+  const route      = useRoute<RouteProp<ExploreStackParamList, 'BookingScreen'>>();
+  const { clubId } = route.params;
+
+  // Derive club-scoped courts on every render (memoised — only changes when clubId changes)
+  const clubCourts = useMemo(() => getCourtsByClubId(clubId), [clubId]);
+  const club       = useMemo(() => getClubById(clubId), [clubId]);
+
+  const defaultCourtId = (clubCourts[0]?.id ?? 'court_1') as CourtId;
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedCourtId, setSelectedCourtId] = useState<CourtId>(DEFAULT_COURT_ID);
+  const [selectedCourtId, setSelectedCourtId] = useState<CourtId>(defaultCourtId);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [slots, setSlots] = useState<SlotInfo[]>([]);
@@ -70,12 +81,10 @@ export function BookingScreen() {
   // Absolute epoch-ms when the current slot lock expires (lockedAt + 10 min)
   const [lockExpiresAt, setLockExpiresAt] = useState<number>(0);
 
-  // Live prices for all courts — feeds CourtPicker cards + checkout modal simultaneously
-  const [livePrices, setLivePrices] = useState<Record<string, number>>({
-    court_1: getCourtById('court_1').basePrice,
-    court_2: getCourtById('court_2').basePrice,
-    court_3: getCourtById('court_3').basePrice,
-  });
+  // Live prices for THIS club's courts
+  const [livePrices, setLivePrices] = useState<Record<string, number>>(() =>
+    Object.fromEntries(clubCourts.map((c) => [c.id, c.basePrice])),
+  );
 
   const canSubmit = selectedDate !== null && selectedSlot !== null;
   const isProcessing = isLocking || isPaymentLoading;
@@ -83,16 +92,15 @@ export function BookingScreen() {
 
   // ─── Subscriptions ──────────────────────────────────────────────────────────
 
-  // One subscription per court, set up once on mount — any admin price change
-  // propagates immediately to every picker card without a court-switch required.
+  // One subscription per court in this club — live price propagates immediately.
   useEffect(() => {
-    const unsubscribers = COURT_IDS.map((id) =>
+    const unsubscribers = clubCourts.map(({ id }) =>
       subscribeToCourtPrice(id, (price) =>
         setLivePrices((prev) => ({ ...prev, [id]: price })),
       ),
     );
     return () => unsubscribers.forEach((u) => u());
-  }, []);
+  }, [clubCourts]);
 
   useEffect(() => {
     if (!selectedDate) {
@@ -166,7 +174,8 @@ export function BookingScreen() {
     setShowMockPayment(false);
     setPaymentSession(null);
     setSelectedSlot(null);
-    navigation.navigate('MyBookings');
+    // BookingScreen lives inside ExploreStack (native-stack) → navigate up to the tab level
+    navigation.getParent<BottomTabNavigationProp<RootTabParamList>>()?.navigate('MyBookings');
     Notifications.scheduleNotificationAsync({
       content: {
         title: '🎾 Rezervasyonunuz Onaylandı!',
@@ -336,7 +345,7 @@ export function BookingScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* ── Screen title ────────────────────────────── */}
-        <Text style={styles.header}>Kort Rezervasyonu</Text>
+        <Text style={styles.header}>{club.name}</Text>
 
         {IS_MOCK_MODE ? (
           <View style={styles.mockBanner}>
@@ -362,6 +371,7 @@ export function BookingScreen() {
         */}
         <View style={styles.courtPickerWrapper}>
           <CourtPicker
+            courts={clubCourts}
             selectedCourtId={selectedCourtId}
             onSelectCourt={handleSelectCourt}
             livePrices={livePrices}

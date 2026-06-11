@@ -1,27 +1,35 @@
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { COURTS } from '../config/courts';
-import type { CourtId } from '../types/booking';
+import type { CourtConfig, CourtId } from '../types/booking';
 
 type CourtPickerProps = {
   selectedCourtId: CourtId;
   onSelectCourt: (courtId: CourtId) => void;
   /** Optional live prices — falls back to basePrice from config */
-  livePrices?: Partial<Record<CourtId, number>>;
+  livePrices?: Partial<Record<string, number>>;
+  /**
+   * Explicit list of courts to display.
+   * When omitted the global COURTS array is used (backward-compatible default).
+   */
+  courts?: CourtConfig[];
 };
 
 export function CourtPicker({
   selectedCourtId,
   onSelectCourt,
   livePrices,
+  courts: courtsProp,
 }: CourtPickerProps) {
+  const courtsToShow = courtsProp ?? COURTS;
+
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.listContent}
     >
-      {COURTS.map((item) => {
+      {courtsToShow.map((item) => {
         const isSelected = item.id === selectedCourtId;
         const price = livePrices?.[item.id] ?? item.basePrice;
 

@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
-import { COURTS, getCourtById } from '../config/courts';
+import { resolveFullCourtLabel } from '../config/data';
 import { cancelBooking, subscribeToUserBookings } from '../services/bookingService';
 import { subscribeToMyJoinedMatches } from '../services/matchService';
 import type { ConfirmedBooking } from '../types/booking';
@@ -58,7 +58,7 @@ function isWithin24Hours(date: string, slotTime: string): boolean {
 }
 
 function resolveCourtName(courtId: string): string {
-  return COURTS.find((c) => c.id === courtId)?.name ?? courtId;
+  return resolveFullCourtLabel(courtId);
 }
 
 // ─── Feed item union type ─────────────────────────────────────────────────────
@@ -164,7 +164,7 @@ function SwipeableBookingCard({
       <GestureDetector gesture={pan}>
         <Animated.View style={[styles.card, cardStyle]}>
           <View style={styles.cardHeader}>
-            <Text style={styles.facilityName}>{getCourtById(booking.courtId).name}</Text>
+            <Text style={styles.facilityName}>{resolveCourtName(booking.courtId)}</Text>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>Onaylandı</Text>
             </View>
