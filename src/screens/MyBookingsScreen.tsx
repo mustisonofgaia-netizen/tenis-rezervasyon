@@ -26,6 +26,7 @@ import {
 } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
+import { useVerificationGuard } from '../hooks/useVerificationGuard';
 import { resolveFullCourtLabel } from '../config/data';
 import { cancelBooking, subscribeToUserBookings } from '../services/bookingService';
 import { subscribeToMyJoinedMatches } from '../services/matchService';
@@ -338,6 +339,7 @@ function SegmentedControl({ activeIndex, onChange, counts }: SegmentedControlPro
 
 export function MyBookingsScreen() {
   const { uid } = useAuth();
+  const { requireVerification } = useVerificationGuard();
 
   // ── Tab navigation ───────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState(0);
@@ -501,7 +503,9 @@ export function MyBookingsScreen() {
               return (
                 <SwipeableBookingCard
                   booking={item.booking}
-                  onFindPlayers={setSelectedBookingForMatch}
+                  onFindPlayers={(booking) =>
+                  requireVerification(() => setSelectedBookingForMatch(booking))
+                }
                   onViewMatch={openMatchDetails}
                   activeMatch={item.match}
                   entryDelay={delay}

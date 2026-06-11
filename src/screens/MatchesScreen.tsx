@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
+import { useVerificationGuard } from '../hooks/useVerificationGuard';
 import { resolveFullCourtLabel } from '../config/data';
 import {
   joinMatch,
@@ -236,6 +237,7 @@ function EmptyState() {
 
 export function MatchesScreen() {
   const { uid } = useAuth();
+  const { requireVerification } = useVerificationGuard();
 
   const [matches, setMatches]     = useState<MatchDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -286,19 +288,21 @@ export function MatchesScreen() {
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleJoin = useCallback(
-    async (matchId: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      setJoiningId(matchId);
-      try {
-        await joinMatch(matchId, uid);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : 'Katılım başarısız oldu.';
-        Alert.alert('Hata', msg);
-      } finally {
-        setJoiningId(null);
-      }
+    (matchId: string) => {
+      requireVerification(async () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        setJoiningId(matchId);
+        try {
+          await joinMatch(matchId, uid);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : 'Katılım başarısız oldu.';
+          Alert.alert('Hata', msg);
+        } finally {
+          setJoiningId(null);
+        }
+      });
     },
-    [uid],
+    [requireVerification, uid],
   );
 
   const handleRemovePlayer = useCallback(

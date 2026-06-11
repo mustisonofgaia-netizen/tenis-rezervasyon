@@ -26,6 +26,7 @@ import { TimeSlotGrid } from '../components/TimeSlotGrid';
 import { IS_MOCK_MODE } from '../config/app';
 import { getClubById, getCourtById, getCourtsByClubId } from '../config/data';
 import { useAuth } from '../context/AuthContext';
+import { useVerificationGuard } from '../hooks/useVerificationGuard';
 import type { ExploreStackParamList, RootTabParamList } from '../navigation/types';
 import {
   lockSlot,
@@ -59,6 +60,7 @@ type PaymentSession = {
 export function BookingScreen() {
   const navigation = useNavigation<BookingNavProp>();
   const { uid }    = useAuth();
+  const { requireVerification } = useVerificationGuard();
   const route      = useRoute<RouteProp<ExploreStackParamList, 'BookingScreen'>>();
   const { clubId } = route.params;
 
@@ -150,8 +152,8 @@ export function BookingScreen() {
 
   const handleBooking = useCallback(() => {
     if (!canSubmit) return;
-    setIsModalVisible(true);
-  }, [canSubmit]);
+    requireVerification(() => setIsModalVisible(true));
+  }, [canSubmit, requireVerification]);
 
   const handleCloseModal = useCallback(() => {
     if (isProcessing) return;

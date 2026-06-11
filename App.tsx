@@ -16,7 +16,7 @@ import { AuthProvider } from './src/context/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { registerForPushNotificationsAsync } from './src/services/notificationService';
 import { AdminDashboardScreen } from './src/screens/AdminDashboardScreen';
-import { AuthScreen } from './src/screens/AuthScreen';
+import { LoginScreen } from './src/screens/LoginScreen';
 import { BookingScreen } from './src/screens/BookingScreen';
 import { ExploreScreen } from './src/screens/ExploreScreen';
 import { MatchesScreen } from './src/screens/MatchesScreen';
@@ -224,7 +224,7 @@ export default function App() {
 
   const renderContent = () => {
     if (authState.phase === 'loading') return <SplashLoader />;
-    if (authState.phase === 'unauthenticated') return <AuthScreen />;
+    if (authState.phase === 'unauthenticated') return <LoginScreen />;
 
     return (
       <AuthProvider

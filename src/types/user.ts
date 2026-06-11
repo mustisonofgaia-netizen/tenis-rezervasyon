@@ -21,13 +21,28 @@ export const DEFAULT_USER_STATS: UserStats = {
  * - `super_admin` — platform operator; can switch between and manage all clubs
  *
  * Legacy Firestore values `'ADMIN'` and `'CUSTOMER'` are coerced to
- * `'super_admin'` and `'player'` respectively at read-time in the
- * App.tsx auth state machine.
+ * `'super_admin'` and `'player'` respectively at read-time in App.tsx.
  */
 export type AdminRole = 'player' | 'club_admin' | 'super_admin';
 
-/** Partial shape of a user document as stored in `users/{uid}`. */
-export type UserProfile = {
+/** Progressive onboarding / identity fields on `users/{uid}`. */
+export type UserVerificationProfile = {
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  /** Set to true after SMS OTP verification completes. Defaults to false. */
+  isVerified: boolean;
+};
+
+export const DEFAULT_VERIFICATION_PROFILE: UserVerificationProfile = {
+  firstName: '',
+  lastName: '',
+  phoneNumber: '',
+  isVerified: false,
+};
+
+/** Shape of a user document as stored in `users/{uid}`. */
+export type UserProfile = UserVerificationProfile & {
   role: AdminRole;
   /**
    * Only meaningful when `role === 'club_admin'`.
@@ -36,3 +51,13 @@ export type UserProfile = {
    */
   managedClubId: string;
 };
+
+/** Returns true when the user must complete progressive verification. */
+export function needsVerification(profile: UserVerificationProfile): boolean {
+  return (
+    !profile.isVerified
+    || !profile.firstName.trim()
+    || !profile.lastName.trim()
+    || !profile.phoneNumber.trim()
+  );
+}
