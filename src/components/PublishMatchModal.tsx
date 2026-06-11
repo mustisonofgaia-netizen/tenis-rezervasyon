@@ -1,4 +1,13 @@
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeOut,
+  SlideInDown,
+  SlideOutDown,
+} from 'react-native-reanimated';
+
+const SHEET_ENTER = SlideInDown.duration(360).easing(Easing.out(Easing.cubic));
+const SHEET_EXIT  = SlideOutDown.duration(250);
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -118,10 +127,10 @@ export function PublishMatchModal({
         {/* Tap-to-dismiss area above the sheet */}
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
 
-        {/* ── Animated bottom sheet — slides up with spring bounce ── */}
+        {/* ── Animated bottom sheet ── */}
         <Animated.View
-          entering={SlideInDown.springify().mass(0.3).damping(18).stiffness(120)}
-          exiting={SlideOutDown.duration(250)}
+          entering={SHEET_ENTER}
+          exiting={SHEET_EXIT}
           style={styles.sheet}
         >
           {/* Drag handle */}

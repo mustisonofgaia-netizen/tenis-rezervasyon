@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, {
+  Easing,
   FadeIn,
   FadeInDown,
   FadeOut,
@@ -9,6 +10,12 @@ import Animated, {
   SlideInDown,
   SlideOutDown,
 } from 'react-native-reanimated';
+
+const CUBIC_OUT = Easing.out(Easing.cubic);
+const SHEET_ENTER = SlideInDown.duration(360).easing(CUBIC_OUT);
+const SHEET_EXIT  = SlideOutDown.duration(250);
+const FADE_DOWN   = FadeInDown.duration(400).easing(CUBIC_OUT);
+const LAYOUT      = LinearTransition.duration(300).easing(CUBIC_OUT);
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -128,9 +135,9 @@ type SetRowProps = {
 function SetRow({ set, index, canRemove, onRemove, onChange }: SetRowProps) {
   return (
     <Animated.View
-      entering={FadeInDown.springify().mass(0.4).damping(18).stiffness(160)}
+      entering={FADE_DOWN}
       exiting={FadeOutUp.duration(180)}
-      layout={LinearTransition.springify().damping(18)}
+      layout={LAYOUT}
       style={styles.setCard}
     >
       <View style={styles.setCardHeader}>
@@ -411,9 +418,9 @@ export function MatchDetailsModal({
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
 
         <Animated.View
-          entering={SlideInDown.springify().mass(0.3).damping(18).stiffness(120)}
-          exiting={SlideOutDown.duration(250)}
-          layout={LinearTransition.springify()}
+          entering={SHEET_ENTER}
+          exiting={SHEET_EXIT}
+          layout={LAYOUT}
           style={styles.sheet}
         >
           <View style={styles.handle} />
@@ -444,7 +451,7 @@ export function MatchDetailsModal({
               <Animated.View
                 entering={FadeIn.duration(300)}
                 exiting={FadeOut.duration(200)}
-                layout={LinearTransition.springify()}
+                layout={LAYOUT}
                 style={styles.finalScoreCard}
               >
                 <Text style={styles.finalScoreEmoji}>🏆</Text>
@@ -540,9 +547,9 @@ export function MatchDetailsModal({
             {/* ── No-keyboard score entry (new + edit mode) ── */}
             {showScoreEntry && (
               <Animated.View
-                entering={FadeInDown.springify().mass(0.5).damping(20)}
+                entering={FADE_DOWN}
                 exiting={FadeOutUp.duration(200)}
-                layout={LinearTransition.springify()}
+                layout={LAYOUT}
                 style={styles.scoreSection}
               >
                 <View style={styles.divider} />
@@ -638,7 +645,7 @@ export function MatchDetailsModal({
             {showCancelButton && (
               <Animated.View
                 entering={FadeIn.duration(300)}
-                layout={LinearTransition.springify()}
+                layout={LAYOUT}
               >
                 <View style={styles.cancelDivider} />
                 <TouchableOpacity
@@ -664,7 +671,7 @@ export function MatchDetailsModal({
             {showLeaveButton && (
               <Animated.View
                 entering={FadeIn.duration(300)}
-                layout={LinearTransition.springify()}
+                layout={LAYOUT}
               >
                 <View style={styles.cancelDivider} />
                 <TouchableOpacity
