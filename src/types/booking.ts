@@ -2,6 +2,20 @@ import type { Timestamp } from 'firebase/firestore';
 
 export type SlotStatus = 'FREE' | 'LOCKED' | 'CONFIRMED' | 'BLOCKED';
 
+// ─── Court model ──────────────────────────────────────────────────────────────
+
+export type CourtId = 'court_1' | 'court_2' | 'court_3';
+
+export type CourtConfig = {
+  id: CourtId;
+  name: string;
+  surface: string;
+  courtType: string;
+  basePrice: number;
+};
+
+// ─── Slot model ───────────────────────────────────────────────────────────────
+
 export type SlotInfo = {
   time: string;
   status: SlotStatus;
@@ -22,15 +36,27 @@ export type AdminSlotInfo = {
   paymentId?: string;
 };
 
+// ─── Booking model ────────────────────────────────────────────────────────────
+
 export type ConfirmedBooking = {
   id: string;
   date: string;
   slotTime: string;
+  courtId: CourtId;
 };
+
+// ─── Firestore document shape ─────────────────────────────────────────────────
 
 export type ReservationDocument = {
   slots?: Record<string, SlotRecord>;
 };
+
+// Court pricing document at courts/{courtId}
+export type CourtPriceDocument = {
+  price: number;
+};
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 export const DEFAULT_SLOT_TIMES = [
   '18:00',

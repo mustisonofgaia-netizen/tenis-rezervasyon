@@ -10,8 +10,6 @@ import {
   View,
 } from 'react-native';
 
-const FACILITY_NAME = 'Mustafa Görkem Tenis Kulübü - Merkez Kort';
-const COURT_PRICE = '500 TL';
 const DISMISS_THRESHOLD = 100;
 const DEFAULT_SHEET_OFFSET = 400;
 
@@ -27,6 +25,8 @@ type BookingSummaryModalProps = {
   date: string;
   time: string;
   onConfirm: () => void;
+  courtName: string;
+  price: number;
 };
 
 function formatBookingDate(dateKey: string): string {
@@ -67,6 +67,8 @@ export function BookingSummaryModal({
   date,
   time,
   onConfirm,
+  courtName,
+  price,
 }: BookingSummaryModalProps) {
   const formattedDate = formatBookingDate(date);
   const sheetTranslateY = useRef(new Animated.Value(DEFAULT_SHEET_OFFSET)).current;
@@ -170,7 +172,7 @@ export function BookingSummaryModal({
           <Text style={styles.title}>Rezervasyon Özeti</Text>
           <View style={styles.divider} />
 
-          <Text style={styles.facilityName}>{FACILITY_NAME}</Text>
+          <Text style={styles.facilityName}>{courtName}</Text>
 
           <View style={styles.detailsSection}>
             <DetailRow iconLabel="T" label="Tarih" value={formattedDate} />
@@ -181,7 +183,7 @@ export function BookingSummaryModal({
 
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Kort Ücreti</Text>
-            <Text style={styles.priceValue}>{COURT_PRICE}</Text>
+            <Text style={styles.priceValue}>{price.toLocaleString('tr-TR')} TL</Text>
           </View>
 
           <TouchableOpacity

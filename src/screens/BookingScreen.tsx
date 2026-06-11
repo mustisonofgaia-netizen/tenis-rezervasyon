@@ -4,8 +4,10 @@ import * as Notifications from 'expo-notifications';
 import { FirebaseError } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useCallback, useEffect, useState } from 'react';
+import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import {
   ActivityIndicator,
+  Alert,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -16,14 +18,20 @@ import {
 import { WebView } from 'react-native-webview';
 
 import { BookingSummaryModal } from '../components/BookingSummaryModal';
+import { CourtPicker } from '../components/CourtPicker';
 import { HorizontalDayPicker } from '../components/HorizontalDayPicker';
 import { TimeSlotGrid } from '../components/TimeSlotGrid';
-import { IS_MOCK_MODE, TAB_BAR_HEIGHT, TEMP_USER_ID } from '../config/app';
-import { MockPaymentScreen } from './MockPaymentScreen';
-import { lockSlot, subscribeToSlots } from '../services/bookingService';
+import { IS_MOCK_MODE, TEMP_USER_ID } from '../config/app';
+import { COURT_IDS, DEFAULT_COURT_ID, getCourtById } from '../config/courts';
+import {
+  lockSlot,
+  subscribeToCourtPrice,
+  subscribeToSlots,
+} from '../services/bookingService';
 import { app } from '../services/firebase';
-import type { SlotInfo } from '../types/booking';
+import type { CourtId, SlotInfo } from '../types/booking';
 import type { CreatePaymentSessionResponse } from '../types/payment';
+import { MockPaymentScreen } from './MockPaymentScreen';
 
 type BookingNavProp = BottomTabNavigationProp<{
   Booking: undefined;
@@ -40,11 +48,14 @@ const createPaymentSession = httpsCallable<
 type PaymentSession = {
   date: string;
   slotTime: string;
+  courtId: CourtId;
 };
 
 export function BookingScreen() {
   const navigation = useNavigation<BookingNavProp>();
+
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedCourtId, setSelectedCourtId] = useState<CourtId>(DEFAULT_COURT_ID);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [slots, setSlots] = useState<SlotInfo[]>([]);
@@ -54,29 +65,43 @@ export function BookingScreen() {
   const [showMockPayment, setShowMockPayment] = useState(false);
   const [paymentSession, setPaymentSession] = useState<PaymentSession | null>(null);
 
+  // Live prices for all courts — feeds CourtPicker cards + checkout modal simultaneously
+  const [livePrices, setLivePrices] = useState<Record<string, number>>({
+    court_1: getCourtById('court_1').basePrice,
+    court_2: getCourtById('court_2').basePrice,
+    court_3: getCourtById('court_3').basePrice,
+  });
+
   const canSubmit = selectedDate !== null && selectedSlot !== null;
   const isProcessing = isLocking || isPaymentLoading;
   const isInPaymentFlow = showMockPayment || paymentUrl !== null;
+
+  // ─── Subscriptions ──────────────────────────────────────────────────────────
+
+  // One subscription per court, set up once on mount — any admin price change
+  // propagates immediately to every picker card without a court-switch required.
+  useEffect(() => {
+    const unsubscribers = COURT_IDS.map((id) =>
+      subscribeToCourtPrice(id, (price) =>
+        setLivePrices((prev) => ({ ...prev, [id]: price })),
+      ),
+    );
+    return () => unsubscribers.forEach((u) => u());
+  }, []);
 
   useEffect(() => {
     if (!selectedDate) {
       setSlots([]);
       return;
     }
+    return subscribeToSlots(selectedDate, selectedCourtId, setSlots);
+  }, [selectedDate, selectedCourtId]);
 
-    const unsubscribe = subscribeToSlots(selectedDate, setSlots);
-    return unsubscribe;
-  }, [selectedDate]);
-
+  // Deselect slot if it becomes unavailable while the user is looking
   useEffect(() => {
-    if (!selectedSlot || isInPaymentFlow || paymentSession) {
-      return;
-    }
-
-    const selected = slots.find((slot) => slot.time === selectedSlot);
-    if (selected && selected.status !== 'FREE') {
-      setSelectedSlot(null);
-    }
+    if (!selectedSlot || isInPaymentFlow || paymentSession) return;
+    const found = slots.find((s) => s.time === selectedSlot);
+    if (found && found.status !== 'FREE') setSelectedSlot(null);
   }, [slots, selectedSlot, isInPaymentFlow, paymentSession]);
 
   useEffect(() => {
@@ -86,13 +111,25 @@ export function BookingScreen() {
     }
   }, [paymentUrl]);
 
+  // ─── Handlers ───────────────────────────────────────────────────────────────
+
   const handleSelectDate = useCallback((dateKey: string) => {
-    setSelectedDate(dateKey);
+    if (dateKey === selectedDate) {
+      setSelectedDate(null);
+      setSelectedSlot(null);
+    } else {
+      setSelectedDate(dateKey);
+      setSelectedSlot(null);
+    }
+  }, [selectedDate]);
+
+  const handleSelectCourt = useCallback((courtId: CourtId) => {
+    setSelectedCourtId(courtId);
     setSelectedSlot(null);
   }, []);
 
   const handleSelectSlot = useCallback((slot: string) => {
-    setSelectedSlot(slot);
+    setSelectedSlot((prev) => (prev === slot ? null : slot));
   }, []);
 
   const handleBooking = useCallback(() => {
@@ -117,6 +154,7 @@ export function BookingScreen() {
   }, []);
 
   const handleMockPaymentSuccess = useCallback(() => {
+    const court = getCourtById(selectedCourtId);
     setShowMockPayment(false);
     setPaymentSession(null);
     setSelectedSlot(null);
@@ -124,38 +162,38 @@ export function BookingScreen() {
     Notifications.scheduleNotificationAsync({
       content: {
         title: '🎾 Rezervasyonunuz Onaylandı!',
-        body: 'Mustafa Görkem Tenis Kulübü - Merkez Kort rezerve edildi. Kapı giriş kodunuz: TC-348',
+        body: `${court.name} rezerve edildi. Kapı giriş kodunuz: TC-348`,
         sound: true,
       },
       trigger: null,
     }).catch(() => {
-      // Notification scheduling failed — non-critical, booking is still confirmed
+      // Non-critical — booking already confirmed in Firestore
     });
-  }, [navigation]);
+  }, [navigation, selectedCourtId]);
 
   const handleConfirmPayment = useCallback(async () => {
-    if (!selectedDate || !selectedSlot || isProcessing) {
-      return;
-    }
+    if (!selectedDate || !selectedSlot || isProcessing) return;
 
     const session: PaymentSession = {
       date: selectedDate,
       slotTime: selectedSlot,
+      courtId: selectedCourtId,
     };
 
-    // 1. Önce özet modalını kapatıp yerel yüklenme ekranını açıyoruz
     setIsModalVisible(false);
     setIsLocking(true);
 
     try {
-      const secured = await lockSlot(session.date, session.slotTime, TEMP_USER_ID);
+      const secured = await lockSlot(
+        session.date,
+        session.slotTime,
+        TEMP_USER_ID,
+        session.courtId,
+      );
 
       if (!secured) {
         setIsLocking(false);
-        Alert.alert(
-          'Slot Unavailable',
-          'This slot was just taken by someone else!',
-        );
+        Alert.alert('Slot Unavailable', 'This slot was just taken by someone else!');
         setSelectedSlot(null);
         return;
       }
@@ -163,13 +201,9 @@ export function BookingScreen() {
       setPaymentSession(session);
 
       if (IS_MOCK_MODE) {
-        // 2. Kilitleme başarılı! Spinner'ı kapatıp UI thread'e nefes aldırıyoruz
         setIsLocking(false);
         setIsPaymentLoading(false);
-        
-        setTimeout(() => {
-          setShowMockPayment(true);
-        }, 150); // Pürüzsüz yerel slide-up tetikleyicisi
+        setTimeout(() => setShowMockPayment(true), 150);
         return;
       }
 
@@ -190,21 +224,17 @@ export function BookingScreen() {
 
       if (error instanceof FirebaseError) {
         if (error.code === 'functions/failed-precondition') {
-          Alert.alert(
-            'Slot Unavailable',
-            'This slot was just taken by someone else!',
-          );
+          Alert.alert('Slot Unavailable', 'This slot was just taken by someone else!');
           setSelectedSlot(null);
           return;
         }
       }
 
-      Alert.alert(
-        'Payment Error',
-        'Unable to start payment. Please try again.',
-      );
+      Alert.alert('Payment Error', 'Unable to start payment. Please try again.');
     }
-  }, [isProcessing, selectedDate, selectedSlot]);
+  }, [isProcessing, selectedCourtId, selectedDate, selectedSlot]);
+
+  // ─── WebView payment screen ──────────────────────────────────────────────────
 
   if (paymentUrl) {
     return (
@@ -234,69 +264,122 @@ export function BookingScreen() {
     );
   }
 
+  // ─── Main screen ─────────────────────────────────────────────────────────────
+
+  const selectedCourt = getCourtById(selectedCourtId);
+  const courtPrice = livePrices[selectedCourtId] ?? selectedCourt.basePrice;
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.mainContent}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.header}>Kort Rezervasyonu</Text>
+      {/*
+        Layout:
+          ┌──────────────────────────────┐
+          │  ScrollView — all content    │  flex: 1
+          │    paddingBottom grows when  │
+          │    the CTA footer appears    │
+          ├──────────────────────────────┤
+          │  Sticky CTA footer           │  only rendered when canSubmit
+          └──────────────────────────────┘
+      */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          // When the sticky CTA is visible, add extra bottom clearance so the
+          // last slot card scrolls fully above the button.
+          canSubmit && styles.scrollContentWithCTA,
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* ── Screen title ────────────────────────────── */}
+        <Text style={styles.header}>Kort Rezervasyonu</Text>
 
-          {IS_MOCK_MODE ? (
-            <View style={styles.mockBanner}>
-              <Text style={styles.mockBannerText}>Mock ödeme modu aktif</Text>
-            </View>
-          ) : null}
+        {IS_MOCK_MODE ? (
+          <View style={styles.mockBanner}>
+            <Text style={styles.mockBannerText}>🧪 Mock ödeme modu aktif</Text>
+          </View>
+        ) : null}
 
-          <Text style={styles.sectionLabel}>Tarih Seçin</Text>
-          <HorizontalDayPicker
-            selectedDate={selectedDate}
-            onSelectDate={handleSelectDate}
+        {/* ── 1. Tarih ────────────────────────────────── */}
+        <Text style={styles.sectionLabel}>Tarih Seçin</Text>
+        <HorizontalDayPicker
+          selectedDate={selectedDate}
+          onSelectDate={handleSelectDate}
+        />
+
+        {/* ── 2. Kort ─────────────────────────────────── */}
+        <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
+          Kort Seçin
+        </Text>
+        {/*
+          Negative horizontal margin breaks CourtPicker out of the parent's
+          paddingHorizontal so it scrolls edge-to-edge. CourtPicker's own
+          contentContainerStyle re-applies paddingHorizontal: 20 for alignment.
+        */}
+        <View style={styles.courtPickerWrapper}>
+          <CourtPicker
+            selectedCourtId={selectedCourtId}
+            onSelectCourt={handleSelectCourt}
+            livePrices={livePrices}
           />
-
-          <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
-            Saat Seçin
-          </Text>
-          {selectedDate ? (
-            <TimeSlotGrid
-              key={selectedDate}
-              slots={slots}
-              onSelectSlot={handleSelectSlot}
-            />
-          ) : (
-            <Text style={styles.helperText}>
-              Lütfen önce bir tarih seçin.
-            </Text>
-          )}
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            disabled={!canSubmit || isProcessing}
-            onPress={handleBooking}
-            style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
-          >
-            <Text
-              style={[
-                styles.submitButtonText,
-                !canSubmit && styles.submitButtonTextDisabled,
-              ]}
-            >
-              Rezervasyon Yap
-            </Text>
-          </TouchableOpacity>
         </View>
-      </View>
 
+        {/* ── 3. Saat ─────────────────────────────────── */}
+        <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
+          Saat Seçin
+        </Text>
+        {selectedDate ? (
+          <TimeSlotGrid
+            key={`${selectedCourtId}_${selectedDate}`}
+            slots={slots}
+            onSelectSlot={handleSelectSlot}
+          />
+        ) : (
+          <View style={styles.emptySlotHint}>
+            <Text style={styles.emptySlotIcon}>📅</Text>
+            <Text style={styles.emptySlotText}>
+              Uygun saatleri görmek için{'\n'}bir tarih seçin
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+
+      {/*
+        Airbnb-style CTA: only rendered when the user has made a selection.
+        Disappears completely when no slot is chosen so it never blocks content.
+        Uses upward shadow instead of a border for premium visual separation.
+      */}
+      {canSubmit && (
+        <Animated.View
+          entering={SlideInDown.springify().mass(0.3).damping(18).stiffness(120)}
+          exiting={SlideOutDown.duration(200)}
+          style={styles.footer}
+        >
+          <TouchableOpacity
+            activeOpacity={0.85}
+            disabled={isProcessing}
+            onPress={handleBooking}
+            style={styles.submitButton}
+          >
+            {isProcessing ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitButtonText}>Rezervasyon Yap</Text>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {/* ── Modals ────────────────────────────────────── */}
       <BookingSummaryModal
         isVisible={isModalVisible}
         onClose={handleCloseModal}
         date={selectedDate ?? ''}
         time={selectedSlot ?? ''}
         onConfirm={handleConfirmPayment}
+        courtName={`${selectedCourt.name} · ${selectedCourt.surface}`}
+        price={courtPrice}
       />
 
       {paymentSession ? (
@@ -304,17 +387,20 @@ export function BookingScreen() {
           isVisible={showMockPayment}
           date={paymentSession.date}
           slotTime={paymentSession.slotTime}
+          courtId={paymentSession.courtId}
+          courtName={getCourtById(paymentSession.courtId).name}
+          price={courtPrice}
           onSuccess={handleMockPaymentSuccess}
           onCancel={handleMockPaymentCancel}
         />
       ) : null}
 
-      {/* MODAL COLLISION ENGELLEYİCİ PREMIUM ABSOLUTE VIEW OVERLAY */}
+      {/* Full-screen spinner during Firestore lock + payment init */}
       {isProcessing && (
         <View style={styles.absoluteLoadingOverlay}>
           <View style={styles.loadingCard}>
             <ActivityIndicator size="large" color="#22C55E" />
-            <Text style={styles.loadingText}>Ödeme sayfası hazırlanıyor...</Text>
+            <Text style={styles.loadingText}>Ödeme sayfası hazırlanıyor…</Text>
           </View>
         </View>
       )}
@@ -322,36 +408,52 @@ export function BookingScreen() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const H_PAD = 20; // horizontal page padding
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
-  mainContent: {
-    flex: 1,
-  },
+
+  // ── Scroll body ────────────────────────────────────────────────────────────
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 40, // Butonun arkasında boşluk kalması için optimize edildi
+    flexGrow: 1,
+    paddingHorizontal: H_PAD,
+    paddingTop: 28,
+    // 100 px clears the floating tab bar (bottom:24 + height:64 + ~12 gap)
+    // even when the CTA button is not visible.
+    paddingBottom: 100,
   },
+  // Applied on top of scrollContent when the CTA footer is visible
+  scrollContentWithCTA: {
+    // 220 px clears the 54 px CTA button sitting at bottom:104 above the
+    // floating tab bar, ensuring the last slot row scrolls fully into view.
+    paddingBottom: 220,
+  },
+
+  // ── Page title ─────────────────────────────────────────────────────────────
   header: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '700',
-    color: '#111827',
-    letterSpacing: -0.5,
-    marginBottom: 28,
+    color: '#0F172A',
+    letterSpacing: -0.8,
+    marginBottom: 24,
   },
+
+  // ── Mock mode banner ───────────────────────────────────────────────────────
   mockBanner: {
     backgroundColor: '#FEF3C7',
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    marginBottom: 20,
-    marginTop: -8,
+    marginBottom: 24,
+    marginTop: -4,
   },
   mockBannerText: {
     fontSize: 13,
@@ -359,62 +461,77 @@ const styles = StyleSheet.create({
     color: '#92400E',
     textAlign: 'center',
   },
+
+  // ── Section labels ─────────────────────────────────────────────────────────
   sectionLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.3,
     marginBottom: 14,
   },
   sectionLabelSpaced: {
-    marginTop: 28,
+    marginTop: 32,
   },
-  helperText: {
-    fontSize: 14,
+
+  // ── CourtPicker edge-to-edge breakout ──────────────────────────────────────
+  courtPickerWrapper: {
+    marginHorizontal: -H_PAD,
+  },
+
+  // ── Empty-state hint for the slot grid ─────────────────────────────────────
+  emptySlotHint: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 10,
+  },
+  emptySlotIcon: {
+    fontSize: 36,
+  },
+  emptySlotText: {
+    fontSize: 15,
     color: '#6B7280',
-    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 22,
   },
+
+  // ── Floating CTA footer ────────────────────────────────────────────────────
+  // Sits above the floating tab bar (bottom:24 + height:64 + 16px gap = 104).
+  // Transparent container lets the scroll content show through underneath.
   footer: {
-    bottom: TAB_BAR_HEIGHT, // Tab bar yüksekliği kadar tam olarak responsive yukarı kaldırıldı
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
-    backgroundColor: '#F9FAFB',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E5E7EB',
+    position: 'absolute',
+    bottom: 104,
+    left: 20,
+    right: 20,
+    backgroundColor: 'transparent',
   },
   submitButton: {
+    height: 54,
     backgroundColor: '#22C55E',
-    paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#22C55E',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#E5E7EB',
-    shadowOpacity: 0,
-    elevation: 0,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
   },
   submitButtonText: {
     fontSize: 17,
     fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
-  submitButtonTextDisabled: {
-    color: '#9CA3AF',
-  },
+
+  // ── Full-screen loading overlay ────────────────────────────────────────────
   absoluteLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(17, 24, 39, 0.45)',
+    backgroundColor: 'rgba(17, 24, 39, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-    zIndex: 99999, // Her şeyin en üstünde kalmasını garanti ediyoruz
+    zIndex: 99999,
   },
   loadingCard: {
     width: '100%',
@@ -437,6 +554,8 @@ const styles = StyleSheet.create({
     color: '#374151',
     textAlign: 'center',
   },
+
+  // ── WebView payment screen ─────────────────────────────────────────────────
   paymentSafeArea: {
     flex: 1,
     backgroundColor: '#FFFFFF',

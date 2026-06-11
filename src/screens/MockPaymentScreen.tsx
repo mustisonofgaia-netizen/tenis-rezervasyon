@@ -12,13 +12,17 @@ import {
   View,
 } from 'react-native';
 
-import { FACILITY_NAME, TEMP_USER_ID } from '../config/app';
+import { TEMP_USER_ID } from '../config/app';
 import { confirmSlot, unlockSlot } from '../services/bookingService';
+import type { CourtId } from '../types/booking';
 
 type MockPaymentScreenProps = {
   isVisible: boolean;
   date: string;
   slotTime: string;
+  courtId: CourtId;
+  courtName: string;
+  price: number;
   onSuccess: () => void;
   onCancel: () => void;
 };
@@ -27,6 +31,9 @@ export function MockPaymentScreen({
   isVisible,
   date,
   slotTime,
+  courtId,
+  courtName,
+  price,
   onSuccess,
   onCancel,
 }: MockPaymentScreenProps) {
@@ -50,6 +57,7 @@ export function MockPaymentScreen({
         date,
         slotTime,
         TEMP_USER_ID,
+        courtId,
         `mock-payment-${Date.now()}`,
       );
       onSuccess();
@@ -72,7 +80,7 @@ export function MockPaymentScreen({
     setIsCancelling(true);
 
     try {
-      await unlockSlot(date, slotTime);
+      await unlockSlot(date, slotTime, courtId);
     } catch (error) {
       console.error('[MockPaymentScreen] unlockSlot failed:', error);
     } finally {
@@ -153,11 +161,11 @@ export function MockPaymentScreen({
 
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>Rezervasyon</Text>
-            <Text style={styles.summaryFacility}>{FACILITY_NAME}</Text>
+            <Text style={styles.summaryFacility}>{courtName}</Text>
             <Text style={styles.summaryMeta}>
               {date} · {slotTime}
             </Text>
-            <Text style={styles.summaryPrice}>500 TL</Text>
+            <Text style={styles.summaryPrice}>{price.toLocaleString('tr-TR')} TL</Text>
           </View>
 
           <TouchableOpacity

@@ -19,7 +19,8 @@ import {
   View,
 } from 'react-native';
 
-import { FACILITY_NAME, TEMP_USER_ID } from '../config/app';
+import { TEMP_USER_ID } from '../config/app';
+import { getCourtById } from '../config/courts';
 import { cancelBooking, subscribeToUserBookings } from '../services/bookingService';
 import type { ConfirmedBooking } from '../types/booking';
 
@@ -57,12 +58,12 @@ function SwipeableBookingCard({ booking }: SwipeableBookingCardProps) {
 
   // Step 3: called on JS thread after slide-exit animation finishes
   const doCancel = useCallback(() => {
-    cancelBooking(booking.date, booking.slotTime, TEMP_USER_ID).catch(() => {
+    cancelBooking(booking.date, booking.slotTime, TEMP_USER_ID, booking.courtId).catch(() => {
       translateX.value = withSpring(0, SPRING_CONFIG);
       Alert.alert('Hata', 'İptal işlemi başarısız oldu. Lütfen tekrar deneyin.');
     });
     // On success: onSnapshot fires → FadeOut exits the row automatically
-  }, [booking.date, booking.slotTime, translateX]);
+  }, [booking.courtId, booking.date, booking.slotTime, translateX]);
 
   // Step 2: called on JS thread after card snaps open to -SNAP_OPEN
   const handleCancelAttempt = useCallback(() => {
@@ -160,7 +161,9 @@ function SwipeableBookingCard({ booking }: SwipeableBookingCardProps) {
       <GestureDetector gesture={pan}>
         <Animated.View style={[styles.card, cardStyle]}>
           <View style={styles.cardHeader}>
-            <Text style={styles.facilityName}>{FACILITY_NAME}</Text>
+            <Text style={styles.facilityName}>
+              {getCourtById(booking.courtId).name}
+            </Text>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>Onaylandı</Text>
             </View>
