@@ -171,6 +171,31 @@ export function subscribeToMyJoinedMatches(
   );
 }
 
+// ─── Cancel a match listing (host only, booking preserved) ───────────────────
+
+/**
+ * Marks a match as 'CANCELLED', removing it from the public lobby.
+ * The underlying court reservation is NOT affected.
+ *
+ * Throws a human-readable Turkish error on validation failures.
+ */
+export async function cancelMatchListing(matchId: string, hostId: string): Promise<void> {
+  const docRef = doc(db, MATCHES_COLLECTION, matchId);
+
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists()) throw new Error('Maç bulunamadı.');
+
+    const data = snapshot.data() as Omit<MatchDocument, 'id'>;
+
+    if (data.hostId !== hostId) throw new Error('Yalnızca maç sahibi ilanı kaldırabilir.');
+    if (data.isScored)          throw new Error('Tamamlanmış bir maçın ilanı kaldırılamaz.');
+    if (data.status === 'CANCELLED') return; // idempotent — already cancelled
+
+    transaction.update(docRef, { status: 'CANCELLED' });
+  });
+}
+
 // ─── Remove a player from a match (host only) ─────────────────────────────────
 
 /**

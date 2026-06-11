@@ -1,5 +1,6 @@
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  FadeInDown,
   FadeOut,
   runOnJS,
   useAnimatedStyle,
@@ -32,29 +33,31 @@ import { PublishMatchModal } from '../components/PublishMatchModal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SWIPE_THRESHOLD   = 80;
-const SNAP_OPEN         = 100;
-const SLIDE_EXIT        = -400;
+const SWIPE_THRESHOLD     = 80;
+const SNAP_OPEN           = 100;
+const SLIDE_EXIT          = -400;
 const DELETE_ACTION_WIDTH = SNAP_OPEN;
-const SPRING_CONFIG     = { mass: 0.2, damping: 15, stiffness: 120 } as const;
+const SPRING_CONFIG       = { mass: 0.2, damping: 15, stiffness: 120 } as const;
+const STAGGER_MS          = 70;
+
+// Activity type accent colors
+const ACCENT_PURE    = '#D1D5DB';   // gray    — plain reservation
+const ACCENT_HOSTED  = '#22C55E';   // green   — hosted match listing
+const ACCENT_JOINED  = '#3B82F6';   // blue    — joined as participant
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatBookingDate(dateKey: string): string {
   const [year, month, day] = dateKey.split('-').map(Number);
   return new Date(year, month - 1, day).toLocaleDateString('tr-TR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
 }
 
 function isWithin24Hours(date: string, slotTime: string): boolean {
   const [year, month, day] = date.split('-').map(Number);
   const [hour, minute]     = slotTime.split(':').map(Number);
-  return new Date(year, month - 1, day, hour, minute).getTime() - Date.now() <
-    24 * 60 * 60 * 1000;
+  return new Date(year, month - 1, day, hour, minute).getTime() - Date.now() < 24 * 60 * 60 * 1000;
 }
 
 function resolveCourtName(courtId: string): string {
@@ -67,13 +70,32 @@ type ActivityItem =
   | { kind: 'booking';     id: string; booking: ConfirmedBooking; match: MatchDocument | null }
   | { kind: 'joinedMatch'; id: string; match: MatchDocument };
 
+// ─── Activity type badge ──────────────────────────────────────────────────────
+
+type ActivityKind = 'pure' | 'hosted' | 'joined';
+
+function TypeBadge({ kind }: { kind: ActivityKind }) {
+  const configs: Record<ActivityKind, { label: string; bg: string; text: string; border: string }> = {
+    pure:   { label: '📋 Sadece Rezervasyon',        bg: '#F9FAFB', text: '#6B7280', border: '#E5E7EB' },
+    hosted: { label: '👑 Sizin İlanınız (Kurucu)',   bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' },
+    joined: { label: '🎾 Katılımcı',                 bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' },
+  };
+  const c = configs[kind];
+  return (
+    <View style={[styles.typeBadge, { backgroundColor: c.bg, borderColor: c.border }]}>
+      <Text style={[styles.typeBadgeText, { color: c.text }]}>{c.label}</Text>
+    </View>
+  );
+}
+
 // ─── Swipeable booking card ───────────────────────────────────────────────────
 
 type SwipeableBookingCardProps = {
   booking: ConfirmedBooking;
   onFindPlayers: (booking: ConfirmedBooking) => void;
-  onViewMatch: (match: MatchDocument) => void;
-  activeMatch: MatchDocument | null;
+  onViewMatch:   (match: MatchDocument) => void;
+  activeMatch:   MatchDocument | null;
+  entryDelay:    number;
 };
 
 function SwipeableBookingCard({
@@ -81,9 +103,13 @@ function SwipeableBookingCard({
   onFindPlayers,
   onViewMatch,
   activeMatch,
+  entryDelay,
 }: SwipeableBookingCardProps) {
   const { uid }    = useAuth();
   const translateX = useSharedValue(0);
+
+  const accentColor = activeMatch ? ACCENT_HOSTED : ACCENT_PURE;
+  const activityKind: ActivityKind = activeMatch ? 'hosted' : 'pure';
 
   const doCancel = useCallback(() => {
     cancelBooking(booking.date, booking.slotTime, uid, booking.courtId).catch(() => {
@@ -95,21 +121,14 @@ function SwipeableBookingCard({
   const handleCancelAttempt = useCallback(() => {
     if (isWithin24Hours(booking.date, booking.slotTime)) {
       translateX.value = withSpring(0, SPRING_CONFIG);
-      Alert.alert(
-        'İptal Süresi Geçti',
-        'Maç saatine 24 saatten az kaldığı için bu rezervasyon iptal edilemez.',
-      );
+      Alert.alert('İptal Süresi Geçti', 'Maç saatine 24 saatten az kaldığı için bu rezervasyon iptal edilemez.');
       return;
     }
     Alert.alert(
       'Rezervasyon İptali',
       'Bu kort rezervasyonunu iptal etmek istediğinize emin misiniz? Ücret iade süreciniz başlatılacaktır.',
       [
-        {
-          text: 'Vazgeç / İptal',
-          style: 'cancel',
-          onPress: () => { translateX.value = withSpring(0, SPRING_CONFIG); },
-        },
+        { text: 'Vazgeç', style: 'cancel', onPress: () => { translateX.value = withSpring(0, SPRING_CONFIG); } },
         {
           text: 'Evet, İptal Et',
           style: 'destructive',
@@ -131,8 +150,7 @@ function SwipeableBookingCard({
         .failOffsetY([-10, 10])
         .onUpdate((e) => {
           const raw = Math.min(0, e.translationX);
-          translateX.value =
-            raw < -SNAP_OPEN ? -SNAP_OPEN + (raw + SNAP_OPEN) * 0.15 : raw;
+          translateX.value = raw < -SNAP_OPEN ? -SNAP_OPEN + (raw + SNAP_OPEN) * 0.15 : raw;
         })
         .onEnd(() => {
           if (translateX.value < -SWIPE_THRESHOLD) {
@@ -152,7 +170,11 @@ function SwipeableBookingCard({
   });
 
   return (
-    <Animated.View exiting={FadeOut.duration(280)} style={styles.swipeRow}>
+    <Animated.View
+      entering={FadeInDown.delay(entryDelay).springify().mass(0.5).damping(18)}
+      exiting={FadeOut.duration(280)}
+      style={styles.swipeRow}
+    >
       {/* Red delete panel */}
       <View style={styles.deleteAction}>
         <Animated.View style={[styles.deleteActionContent, actionStyle]}>
@@ -162,7 +184,11 @@ function SwipeableBookingCard({
       </View>
 
       <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.card, cardStyle]}>
+        <Animated.View style={[styles.card, { borderLeftColor: accentColor }, cardStyle]}>
+
+          {/* Activity type badge */}
+          <TypeBadge kind={activityKind} />
+
           <View style={styles.cardHeader}>
             <Text style={styles.facilityName}>{resolveCourtName(booking.courtId)}</Text>
             <View style={styles.badge}>
@@ -181,7 +207,7 @@ function SwipeableBookingCard({
             </View>
           </View>
 
-          {/* ── Find players / active-listing badge ── */}
+          {/* Find-players / active-listing CTA */}
           <View style={styles.cardFooter}>
             {activeMatch ? (
               <TouchableOpacity
@@ -211,52 +237,57 @@ function SwipeableBookingCard({
   );
 }
 
-// ─── Joined-match card (non-host, non-swipeable) ──────────────────────────────
+// ─── Joined-match card ────────────────────────────────────────────────────────
 
 type JoinedMatchCardProps = {
-  match: MatchDocument;
+  match:       MatchDocument;
   onViewDetails: () => void;
+  entryDelay:  number;
 };
 
-function JoinedMatchCard({ match, onViewDetails }: JoinedMatchCardProps) {
+function JoinedMatchCard({ match, onViewDetails, entryDelay }: JoinedMatchCardProps) {
   const courtName = resolveCourtName(match.courtId);
   const isFull    = match.status === 'FULL';
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.78}
-      onPress={onViewDetails}
-      style={styles.joinedCard}
+    <Animated.View
+      entering={FadeInDown.delay(entryDelay).springify().mass(0.5).damping(18)}
+      style={styles.joinedCardWrapper}
     >
-      <View style={styles.cardHeader}>
-        <Text style={styles.facilityName}>{courtName}</Text>
-        <View style={[styles.badge, isFull && styles.badgeFull]}>
-          <Text style={[styles.badgeText, isFull && styles.badgeTextFull]}>
-            {isFull ? 'Dolu' : 'Açık'}
-          </Text>
-        </View>
-      </View>
+      <TouchableOpacity activeOpacity={0.78} onPress={onViewDetails} style={styles.joinedCard}>
+        {/* Activity type badge */}
+        <TypeBadge kind="joined" />
 
-      <View style={styles.cardBody}>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Tarih</Text>
-          <Text style={styles.infoValue}>{formatBookingDate(match.date)}</Text>
+        <View style={styles.cardHeader}>
+          <Text style={styles.facilityName}>{courtName}</Text>
+          <View style={[styles.badge, isFull && styles.badgeFull]}>
+            <Text style={[styles.badgeText, isFull && styles.badgeTextFull]}>
+              {isFull ? 'Dolu' : 'Açık'}
+            </Text>
+          </View>
         </View>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Saat</Text>
-          <Text style={styles.infoValue}>{match.slotTime}</Text>
-        </View>
-      </View>
 
-      <View style={styles.cardFooter}>
-        <View style={styles.joinedBadgeRow}>
-          <Text style={styles.joinedBadgeText}>
-            🎾  Katılımcı · {match.joinedPlayers.length}/{match.requiredPlayers} Oyuncu
-          </Text>
-          <Text style={styles.viewDetailsHint}>Detaylar →</Text>
+        <View style={styles.cardBody}>
+          <View style={styles.infoBlock}>
+            <Text style={styles.infoLabel}>Tarih</Text>
+            <Text style={styles.infoValue}>{formatBookingDate(match.date)}</Text>
+          </View>
+          <View style={styles.infoBlock}>
+            <Text style={styles.infoLabel}>Saat</Text>
+            <Text style={styles.infoValue}>{match.slotTime}</Text>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
+
+        <View style={styles.cardFooter}>
+          <View style={styles.joinedBadgeRow}>
+            <Text style={styles.joinedBadgeText}>
+              {match.joinedPlayers.length}/{match.requiredPlayers} Oyuncu
+            </Text>
+            <Text style={styles.viewDetailsHint}>Detayları Gör →</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
@@ -265,34 +296,28 @@ function JoinedMatchCard({ match, onViewDetails }: JoinedMatchCardProps) {
 export function MyBookingsScreen() {
   const { uid } = useAuth();
 
-  const [bookings, setBookings]   = useState<ConfirmedBooking[]>([]);
+  const [bookings,      setBookings]      = useState<ConfirmedBooking[]>([]);
   const [joinedMatches, setJoinedMatches] = useState<MatchDocument[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoading,     setIsLoading]     = useState(true);
+  const [isRefreshing,  setIsRefreshing]  = useState(false);
 
-  // Publish-match modal
   const [selectedBookingForMatch, setSelectedBookingForMatch] =
     useState<ConfirmedBooking | null>(null);
 
-  // Match-details modal — store just the ID; derive match reactively so kicks
-  // auto-update the modal without any extra plumbing.
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
   // ── Derived data ─────────────────────────────────────────────────────────
 
-  // Map hosted matches by bookingId for spam-guard
   const hostedMatchByBookingId = useMemo(
     () => new Map(joinedMatches.filter((m) => m.hostId === uid).map((m) => [m.bookingId, m])),
     [joinedMatches, uid],
   );
 
-  // Reactive selected match — stays fresh after kicks
   const selectedMatch = useMemo(
     () => (selectedMatchId ? (joinedMatches.find((m) => m.id === selectedMatchId) ?? null) : null),
     [joinedMatches, selectedMatchId],
   );
 
-  // Selected match booking details for the modal
   const selectedMatchBookingDetails = useMemo((): MatchBookingDetails | null => {
     if (!selectedMatch) return null;
     return {
@@ -302,7 +327,6 @@ export function MyBookingsScreen() {
     };
   }, [selectedMatch]);
 
-  // Unified activity feed: owned bookings + joined (non-hosted) matches
   const activities = useMemo((): ActivityItem[] => {
     const bookingItems: ActivityItem[] = bookings.map((b) => ({
       kind:    'booking',
@@ -313,11 +337,7 @@ export function MyBookingsScreen() {
 
     const joinedItems: ActivityItem[] = joinedMatches
       .filter((m) => m.hostId !== uid)
-      .map((m) => ({
-        kind:  'joinedMatch',
-        id:    `match-${m.id}`,
-        match: m,
-      }));
+      .map((m) => ({ kind: 'joinedMatch', id: `match-${m.id}`, match: m }));
 
     return [...bookingItems, ...joinedItems];
   }, [bookings, hostedMatchByBookingId, joinedMatches, uid]);
@@ -333,7 +353,6 @@ export function MyBookingsScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Single subscription covers both hosted and joined matches
   useEffect(() => subscribeToMyJoinedMatches(uid, setJoinedMatches), [uid]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
@@ -388,7 +407,8 @@ export function MyBookingsScreen() {
             </Text>
           </View>
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
+          const delay = index * STAGGER_MS;
           if (item.kind === 'booking') {
             return (
               <SwipeableBookingCard
@@ -396,6 +416,7 @@ export function MyBookingsScreen() {
                 onFindPlayers={setSelectedBookingForMatch}
                 onViewMatch={openMatchDetails}
                 activeMatch={item.match}
+                entryDelay={delay}
               />
             );
           }
@@ -403,12 +424,12 @@ export function MyBookingsScreen() {
             <JoinedMatchCard
               match={item.match}
               onViewDetails={() => openMatchDetails(item.match)}
+              entryDelay={delay}
             />
           );
         }}
       />
 
-      {/* ── Publish-match modal ────────────────────── */}
       {selectedBookingForMatch && (
         <PublishMatchModal
           isVisible
@@ -417,7 +438,6 @@ export function MyBookingsScreen() {
         />
       )}
 
-      {/* ── Match-details modal ────────────────────── */}
       {selectedMatch && selectedMatchBookingDetails && (
         <MatchDetailsModal
           isVisible
@@ -433,66 +453,49 @@ export function MyBookingsScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
+  safeArea: { flex: 1, backgroundColor: '#F9FAFB' },
+  loaderContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  listContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 120 },
+  listContentEmpty: { flexGrow: 1 },
+  header: { fontSize: 28, fontWeight: '700', color: '#111827', letterSpacing: -0.5, marginBottom: 20 },
+
+  // ── Activity type badge ───────────────────────────────────────────────────
+  typeBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 10,
   },
-  loaderContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 120,
-  },
-  listContentEmpty: {
-    flexGrow: 1,
-  },
-  header: {
-    fontSize: 28,
+  typeBadgeText: {
+    fontSize: 11,
     fontWeight: '700',
-    color: '#111827',
-    letterSpacing: -0.5,
-    marginBottom: 20,
+    letterSpacing: 0.2,
   },
 
   // ── Swipe row ─────────────────────────────────────────────────────────────
-  swipeRow: {
-    marginBottom: 14,
-  },
+  swipeRow: { marginBottom: 14 },
   deleteAction: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
+    position: 'absolute', top: 0, right: 0, bottom: 0,
     width: DELETE_ACTION_WIDTH,
     backgroundColor: '#EF4444',
-    borderTopRightRadius: 18,
-    borderBottomRightRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderTopRightRadius: 18, borderBottomRightRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
   },
-  deleteActionContent: {
-    alignItems: 'center',
-    gap: 5,
-  },
-  deleteActionIcon: { fontSize: 22 },
-  deleteActionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.4,
-  },
+  deleteActionContent: { alignItems: 'center', gap: 5 },
+  deleteActionIcon:  { fontSize: 22 },
+  deleteActionLabel: { fontSize: 11, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.4 },
 
-  // ── Booking card (swipeable) ──────────────────────────────────────────────
+  // ── Base card (booking, swipeable) ────────────────────────────────────────
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
     padding: 18,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: '#E5E7EB',
+    // Left accent border (color set dynamically)
+    borderLeftWidth: 4,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
@@ -500,139 +503,62 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
-  // ── Joined-match card (non-swipeable) ─────────────────────────────────────
+  // ── Joined-match card wrapper + card ─────────────────────────────────────
+  joinedCardWrapper: { marginBottom: 14 },
   joinedCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
     padding: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E7EB',
-    borderLeftWidth: 3,
-    borderLeftColor: '#3B82F6',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderLeftWidth: 4,
+    borderLeftColor: ACCENT_JOINED,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
     shadowRadius: 12,
     elevation: 2,
-    marginBottom: 14,
   },
 
   // ── Shared card anatomy ───────────────────────────────────────────────────
   cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-    gap: 12,
+    flexDirection: 'row', alignItems: 'flex-start',
+    justifyContent: 'space-between', marginBottom: 16, gap: 12,
   },
-  facilityName: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    lineHeight: 22,
-  },
+  facilityName: { flex: 1, fontSize: 16, fontWeight: '700', color: '#111827', lineHeight: 22 },
   badge: {
-    backgroundColor: '#DCFCE7',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: '#DCFCE7', borderRadius: 999,
+    paddingHorizontal: 10, paddingVertical: 6,
   },
-  badgeFull: {
-    backgroundColor: '#FEF3C7',
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#15803D',
-    letterSpacing: 0.3,
-  },
-  badgeTextFull: {
-    color: '#92400E',
-  },
-  cardBody: { gap: 12 },
-  infoBlock: { gap: 4 },
-  infoLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  infoValue: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#374151',
-  },
+  badgeFull:        { backgroundColor: '#FEF3C7' },
+  badgeText:        { fontSize: 12, fontWeight: '700', color: '#15803D', letterSpacing: 0.3 },
+  badgeTextFull:    { color: '#92400E' },
+  cardBody:         { gap: 12 },
+  infoBlock:        { gap: 4 },
+  infoLabel:        { fontSize: 12, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.6 },
+  infoValue:        { fontSize: 15, fontWeight: '600', color: '#374151' },
 
   // ── Card footer (CTA row) ─────────────────────────────────────────────────
   cardFooter: {
-    marginTop: 16,
-    paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E5E7EB',
+    marginTop: 16, paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E5E7EB',
   },
   findPlayersButton: {
-    backgroundColor: '#F0FDF4',
-    borderRadius: 12,
-    paddingVertical: 11,
-    alignItems: 'center',
+    backgroundColor: '#F0FDF4', borderRadius: 12, paddingVertical: 11, alignItems: 'center',
   },
-  findPlayersText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#15803D',
-    letterSpacing: 0.2,
-  },
+  findPlayersText: { fontSize: 13, fontWeight: '700', color: '#15803D', letterSpacing: 0.2 },
   activeMatchBadge: {
-    backgroundColor: '#FFFBEB',
-    borderRadius: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
+    backgroundColor: '#FFFBEB', borderRadius: 12,
+    paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center',
+    borderWidth: 1, borderColor: '#FDE68A',
   },
-  activeMatchText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#92400E',
-    letterSpacing: 0.1,
-  },
-  joinedBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  joinedBadgeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#3B82F6',
-  },
-  viewDetailsHint: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#93C5FD',
-  },
+  activeMatchText: { fontSize: 13, fontWeight: '700', color: '#92400E', letterSpacing: 0.1 },
+  joinedBadgeRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  joinedBadgeText: { fontSize: 13, fontWeight: '600', color: ACCENT_JOINED },
+  viewDetailsHint: { fontSize: 12, fontWeight: '600', color: '#93C5FD' },
 
   // ── Empty state ───────────────────────────────────────────────────────────
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 80,
-    paddingHorizontal: 24,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, paddingHorizontal: 24 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8 },
+  emptyText:  { fontSize: 14, lineHeight: 22, color: '#6B7280', textAlign: 'center' },
 });

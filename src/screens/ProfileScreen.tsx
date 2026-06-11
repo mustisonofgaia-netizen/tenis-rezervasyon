@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from 'firebase/auth';
-import { useCallback } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
@@ -12,8 +13,48 @@ import {
 } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
-import { auth } from '../services/firebase';
+import { auth, db } from '../services/firebase';
 import { avatarColor } from '../services/userService';
+import type { UserStats } from '../types/user';
+import { DEFAULT_USER_STATS } from '../types/user';
+
+// ─── Rank helpers ─────────────────────────────────────────────────────────────
+
+type RankInfo = {
+  label:   string;
+  emoji:   string;
+  color:   string;
+  bgColor: string;
+  border:  string;
+};
+
+function getRankInfo(elo: number): RankInfo {
+  if (elo < 1400) {
+    return {
+      label:   'Bronz Oyuncu',
+      emoji:   '🥉',
+      color:   '#92400E',
+      bgColor: '#FEF3C7',
+      border:  '#FDE68A',
+    };
+  }
+  if (elo <= 1600) {
+    return {
+      label:   'Gümüş Oyuncu',
+      emoji:   '🥈',
+      color:   '#374151',
+      bgColor: '#F3F4F6',
+      border:  '#D1D5DB',
+    };
+  }
+  return {
+    label:   'Altın Oyuncu',
+    emoji:   '🥇',
+    color:   '#78350F',
+    bgColor: '#FFF7ED',
+    border:  '#FED7AA',
+  };
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -33,6 +74,24 @@ export function ProfileScreen() {
   const email   = auth.currentUser?.email ?? '';
   const initial = email[0]?.toUpperCase() ?? uid[0]?.toUpperCase() ?? '?';
   const color   = avatarColor(uid);
+
+  const [stats, setStats] = useState<UserStats>(DEFAULT_USER_STATS);
+
+  // ── Subscribe to live user stats ──────────────────────────────────────────
+  useEffect(() => {
+    const userRef = doc(db, 'users', uid);
+    return onSnapshot(userRef, (snap) => {
+      const data = snap.data();
+      if (!data) return;
+      setStats({
+        eloRating:     (data.eloRating     as number | undefined) ?? 1500,
+        matchesPlayed: (data.matchesPlayed as number | undefined) ?? 0,
+        wins:          (data.wins          as number | undefined) ?? 0,
+      });
+    });
+  }, [uid]);
+
+  const rank = getRankInfo(stats.eloRating);
 
   const handleChangePassword = useCallback(() => {
     Alert.alert('Şifremi Değiştir', 'Yakında aktif edilecek.');
@@ -68,6 +127,28 @@ export function ProfileScreen() {
           <Text style={styles.uidText} numberOfLines={1}>
             UID: {uid.slice(0, 20)}…
           </Text>
+
+          {/* ── Rank badge ──────────────────────────── */}
+          <View style={[styles.rankBadge, { backgroundColor: rank.bgColor, borderColor: rank.border }]}>
+            <Text style={styles.rankEmoji}>{rank.emoji}</Text>
+            <Text style={[styles.rankLabel, { color: rank.color }]}>{rank.label}</Text>
+          </View>
+        </View>
+
+        {/* ── Stats row ────────────────────────────── */}
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{stats.eloRating}</Text>
+            <Text style={styles.statLabel}>Elo Puanı</Text>
+          </View>
+          <View style={[styles.statItem, styles.statItemCenter]}>
+            <Text style={styles.statValue}>{stats.wins}</Text>
+            <Text style={styles.statLabel}>Galibiyet</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{stats.matchesPlayed}</Text>
+            <Text style={styles.statLabel}>Maç</Text>
+          </View>
         </View>
 
         {/* ── Settings group ──────────────────────── */}
@@ -120,7 +201,7 @@ const styles = StyleSheet.create({
   // ── Hero ─────────────────────────────────────────────────────────────────
   hero: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 24,
   },
   avatarCircle: {
     width: 88,
@@ -152,6 +233,66 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: '#9CA3AF',
     letterSpacing: 0.2,
+    marginBottom: 14,
+  },
+
+  // ── Rank badge ────────────────────────────────────────────────────────────
+  rankBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  rankEmoji: {
+    fontSize: 16,
+  },
+  rankLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+
+  // ── Stats row ─────────────────────────────────────────────────────────────
+  statsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+    marginBottom: 36,
+    overflow: 'hidden',
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  statItemCenter: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.5,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 
   // ── Section label ─────────────────────────────────────────────────────────

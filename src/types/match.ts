@@ -21,4 +21,18 @@ export type MatchDocument = {
   status: 'OPEN' | 'FULL' | 'CANCELLED';
   /** epoch-ms timestamp set by the client at creation time */
   createdAt: number;
+
+  // ── Post-match scoring ────────────────────────────────────────────────────
+  /** Whether a score has been submitted for this match. Defaults to false. */
+  isScored?: boolean;
+  /** Human-readable score string, e.g. "6-4, 5-7, 7-6" */
+  score?: string;
+  /** uid of the player who won */
+  winnerId?: string;
+  /**
+   * Internal snapshot of Elo ratings immediately BEFORE this match was scored.
+   * Stored by scoreService to enable clean Elo rollbacks when the score is updated.
+   * Key = uid, Value = pre-scoring eloRating.
+   */
+  _eloSnapshot?: Record<string, number>;
 };
