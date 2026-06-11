@@ -1,6 +1,7 @@
 import { doc, runTransaction } from 'firebase/firestore';
 
 import { db } from './firebase';
+import { sendPushNotification } from './notificationService';
 import type { MatchDocument } from '../types/match';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -51,6 +52,10 @@ export async function submitMatchScore(
   const primaryLoserRef    = doc(db, USERS_COLLECTION, loserIds[0]!);
   const secondaryLoserRefs = loserIds.slice(1).map((id) => doc(db, USERS_COLLECTION, id));
 
+  // Captured inside the transaction for post-tx notification dispatch
+  let capturedJoinedPlayers: string[] = [];
+  let capturedHostId = '';
+
   await runTransaction(db, async (tx) => {
     // ── 1. Reads (all before any write) ───────────────────────────────────
     const matchSnap        = await tx.get(matchRef);
@@ -62,8 +67,11 @@ export async function submitMatchScore(
     if (!matchSnap.exists()) throw new Error('Maç bulunamadı.');
     if (matchSnap.data()?.isScored) throw new Error('Bu maç zaten skorlandı.');
 
+    capturedJoinedPlayers = (matchSnap.data()?.joinedPlayers as string[] | undefined) ?? [];
+    capturedHostId        = (matchSnap.data()?.hostId        as string  | undefined) ?? '';
+
     // ── 3. Elo ────────────────────────────────────────────────────────────
-    const winnerElo     = (winnerSnap.data()?.eloRating     as number | undefined) ?? 1500;
+    const winnerElo       = (winnerSnap.data()?.eloRating       as number | undefined) ?? 1500;
     const primaryLoserElo = (primaryLoserSnap.data()?.eloRating as number | undefined) ?? 1500;
 
     const { newWinnerElo, newLoserElo } = calculateNewElo(winnerElo, primaryLoserElo);
@@ -95,6 +103,17 @@ export async function submitMatchScore(
       }, { merge: true });
     });
   });
+
+  // Notify all participants except the host — fire-and-forget
+  const recipients = capturedJoinedPlayers.filter((id) => id !== capturedHostId);
+  for (const playerId of recipients) {
+    sendPushNotification(
+      playerId,
+      '🏆 Maç Sonucu Girildi!',
+      `${score} skoruyla maç sonuçlandı. Güncel Elo puanını görmek için profiline bak!`,
+      { matchId },
+    ).catch(() => {});
+  }
 }
 
 // ─── Score Update (with Elo rollback) ────────────────────────────────────────
@@ -122,6 +141,10 @@ export async function updateMatchScore(
   const newPrimaryLoserId = newLoserIds[0]!;
   const matchRef          = doc(db, MATCHES_COLLECTION, matchId);
 
+  // Captured inside the transaction for post-tx notification dispatch
+  let capturedJoinedPlayers: string[] = [];
+  let capturedHostId = '';
+
   await runTransaction(db, async (tx) => {
     // ── 1. Read match ──────────────────────────────────────────────────────
     const matchSnap = await tx.get(matchRef);
@@ -129,6 +152,9 @@ export async function updateMatchScore(
 
     const matchData = matchSnap.data() as MatchDocument & { _eloSnapshot?: Record<string, number> };
     if (!matchData.isScored) throw new Error('Henüz skorlanmamış bir maç güncellenemez.');
+
+    capturedJoinedPlayers = matchData.joinedPlayers;
+    capturedHostId        = matchData.hostId ?? '';
 
     const oldWinnerId       = matchData.winnerId ?? '';
     const oldPrimaryLoserId = matchData.joinedPlayers.find((id) => id !== oldWinnerId) ?? '';
@@ -191,4 +217,15 @@ export async function updateMatchScore(
       tx.set(ref, data, { merge: true });
     }
   });
+
+  // Notify all participants except the host — fire-and-forget
+  const recipients = capturedJoinedPlayers.filter((id) => id !== capturedHostId);
+  for (const playerId of recipients) {
+    sendPushNotification(
+      playerId,
+      '🏆 Maç Sonucu Güncellendi!',
+      `${newScore} skoruyla maç sonuçlandı. Güncel Elo puanını görmek için profiline bak!`,
+      { matchId },
+    ).catch(() => {});
+  }
 }

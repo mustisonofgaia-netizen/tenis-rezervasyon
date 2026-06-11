@@ -2,18 +2,22 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   onSnapshot,
   runTransaction,
   where,
   query,
 } from 'firebase/firestore';
 
+import { resolveFullCourtLabel } from '../config/data';
 import type { MatchDocument, SkillLevel } from '../types/match';
 import { db } from './firebase';
+import { sendPushNotification } from './notificationService';
 
-// ─── Collection ───────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const MATCHES_COLLECTION = 'matches';
+const USERS_COLLECTION   = 'users';
 
 // ─── Publish a new match listing ──────────────────────────────────────────────
 
@@ -118,12 +122,14 @@ export function subscribeToMyHostedMatches(
  */
 export async function joinMatch(matchId: string, userId: string): Promise<void> {
   const docRef = doc(db, MATCHES_COLLECTION, matchId);
+  let capturedHostId = '';
 
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(docRef);
     if (!snapshot.exists()) throw new Error('Maç bulunamadı.');
 
     const data = snapshot.data() as Omit<MatchDocument, 'id'>;
+    capturedHostId = data.hostId;
 
     if (data.status !== 'OPEN') throw new Error('Bu maça artık katılınamaz.');
     if (data.joinedPlayers.includes(userId)) throw new Error('Bu maça zaten katıldınız.');
@@ -134,6 +140,21 @@ export async function joinMatch(matchId: string, userId: string): Promise<void> 
 
     transaction.update(docRef, updates);
   });
+
+  // Notify the host — fire-and-forget, never blocks the join flow
+  if (capturedHostId && capturedHostId !== userId) {
+    getDoc(doc(db, USERS_COLLECTION, userId))
+      .then((snap) => {
+        const joinerEmail = (snap.data()?.email as string | undefined) ?? 'Bir oyuncu';
+        return sendPushNotification(
+          capturedHostId,
+          '🎾 İlanına Yeni Oyuncu!',
+          `${joinerEmail} maçına katıldı! Kadro şekilleniyor.`,
+          { matchId },
+        );
+      })
+      .catch(() => {});
+  }
 }
 
 // ─── Subscribe to matches the user has joined ─────────────────────────────────
@@ -209,12 +230,14 @@ export async function removePlayerFromMatch(
   hostId: string,
 ): Promise<void> {
   const docRef = doc(db, MATCHES_COLLECTION, matchId);
+  let capturedCourtId = '';
 
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(docRef);
     if (!snapshot.exists()) throw new Error('Maç bulunamadı.');
 
     const data = snapshot.data() as Omit<MatchDocument, 'id'>;
+    capturedCourtId = data.courtId;
 
     if (data.hostId !== hostId) throw new Error('Yalnızca maç sahibi oyuncu çıkarabilir.');
     if (targetUserId === hostId) throw new Error('Maç sahibi kendini çıkaramaz.');
@@ -226,4 +249,13 @@ export async function removePlayerFromMatch(
 
     transaction.update(docRef, updates);
   });
+
+  // Notify the kicked player — fire-and-forget
+  const courtLabel = resolveFullCourtLabel(capturedCourtId);
+  sendPushNotification(
+    targetUserId,
+    '⚠️ Maç Güncellemesi',
+    `${courtLabel} maçından çıkarıldınız. Lobiye göz atıp yeni maçlar bulabilirsiniz.`,
+    { matchId },
+  ).catch(() => {});
 }

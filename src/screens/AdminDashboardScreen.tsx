@@ -13,24 +13,28 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { auth } from '../services/firebase';
-
 import { CourtPicker } from '../components/CourtPicker';
 import { HorizontalDayPicker } from '../components/HorizontalDayPicker';
-import { FACILITY_NAME } from '../config/app';
-import { COURT_IDS, DEFAULT_COURT_ID, getCourtById } from '../config/courts';
+import { CLUBS, getClubById, getCourtById, getCourtsByClubId } from '../config/data';
+import { useAuth } from '../context/AuthContext';
 import {
   adminBlockSlot,
   adminCancelSlot,
   adminUnblockSlot,
   adminUpdateCourtPrice,
   subscribeToAdminSlots,
-  subscribeToAllCourtsAdminSlots,
   subscribeToCourtPrice,
+  subscribeToSelectedCourtsAdminSlots,
 } from '../services/bookingService';
+import { auth } from '../services/firebase';
 import type { AdminSlotInfo, CourtId, SlotStatus } from '../types/booking';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/** Marketplace platform fee deducted from club gross revenue. */
+const COMMISSION_RATE = 0.2;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getTodayKey(): string {
   const d = new Date();
@@ -48,16 +52,22 @@ type MetricCardProps = {
   label: string;
   value: string;
   accent: string;
+  subLabel?: string;
 };
 
-function MetricCard({ icon, label, value, accent }: MetricCardProps) {
+function MetricCard({ icon, label, value, accent, subLabel }: MetricCardProps) {
   return (
     <View style={[styles.metricCard, { borderTopColor: accent }]}>
       <Text style={styles.metricIcon}>{icon}</Text>
-      <Text style={[styles.metricValue, { color: accent }]} numberOfLines={1} adjustsFontSizeToFit>
+      <Text
+        style={[styles.metricValue, { color: accent }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {value}
       </Text>
       <Text style={styles.metricLabel}>{label}</Text>
+      {subLabel ? <Text style={styles.metricSubLabel}>{subLabel}</Text> : null}
     </View>
   );
 }
@@ -195,33 +205,44 @@ function AdminSlotRow({ slot, date, courtId }: AdminSlotRowProps) {
 
 export function AdminDashboardScreen() {
   const insets = useSafeAreaInsets();
+  const { role, managedClubId } = useAuth();
 
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayKey());
-  const [selectedCourtId, setSelectedCourtId] = useState<CourtId>(DEFAULT_COURT_ID);
+  // ── Club scope ─────────────────────────────────────────────────────────────
+  // super_admin picks a club from a selector; club_admin is locked to their club.
+  const [superAdminClubId, setSuperAdminClubId] = useState<string>(CLUBS[0]?.id ?? '');
+  const scopedClubId  = role === 'club_admin' ? managedClubId : superAdminClubId;
+  const scopedClub    = useMemo(() => getClubById(scopedClubId), [scopedClubId]);
+  const scopedCourts  = useMemo(() => getCourtsByClubId(scopedClubId), [scopedClubId]);
 
-  const [courtSlots, setCourtSlots] = useState<AdminSlotInfo[]>([]);
-  const [isLoadingSlots, setIsLoadingSlots] = useState(true);
+  // Guard: club_admin without a configured club
+  const isMisconfigured = role === 'club_admin' && !managedClubId;
 
-  const [allCourtsSlots, setAllCourtsSlots] = useState<Record<CourtId, AdminSlotInfo[]>>({
-    court_1: [],
-    court_2: [],
-    court_3: [],
-  });
-
-  const [allPrices, setAllPrices] = useState<Record<CourtId, number>>({
-    court_1: getCourtById('court_1').basePrice,
-    court_2: getCourtById('court_2').basePrice,
-    court_3: getCourtById('court_3').basePrice,
-  });
-
-  const [courtPrice, setCourtPrice] = useState<number>(
-    getCourtById(DEFAULT_COURT_ID).basePrice,
+  // ── Date & court selection ─────────────────────────────────────────────────
+  const [selectedDate, setSelectedDate]     = useState<string>(getTodayKey());
+  const [selectedCourtId, setSelectedCourtId] = useState<CourtId>(
+    (scopedCourts[0]?.id ?? 'court_1') as CourtId,
   );
+
+  // Reset court to first of the new club whenever the scoped club changes
+  useEffect(() => {
+    const first = getCourtsByClubId(scopedClubId)[0];
+    if (first) setSelectedCourtId(first.id as CourtId);
+  }, [scopedClubId]);
+
+  // ── Slot state ─────────────────────────────────────────────────────────────
+  const [courtSlots, setCourtSlots]       = useState<AdminSlotInfo[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(true);
+  const [allCourtsSlots, setAllCourtsSlots] = useState<Record<string, AdminSlotInfo[]>>({});
+
+  // ── Price state ────────────────────────────────────────────────────────────
+  const [allPrices, setAllPrices]     = useState<Record<string, number>>({});
   const [editingPrice, setEditingPrice] = useState<string | null>(null);
   const [isSavingPrice, setIsSavingPrice] = useState(false);
 
-  // ─── Subscriptions ──────────────────────────────────────────────────────────
+  // Derived — never stored in state to avoid stale reads
+  const courtPrice = allPrices[selectedCourtId] ?? getCourtById(selectedCourtId).basePrice;
 
+  // ── Subscriptions: detail slots (selected court) ──────────────────────────
   useEffect(() => {
     setIsLoadingSlots(true);
     return subscribeToAdminSlots(selectedDate, selectedCourtId, (nextSlots) => {
@@ -230,58 +251,65 @@ export function AdminDashboardScreen() {
     });
   }, [selectedDate, selectedCourtId]);
 
+  // ── Subscriptions: aggregate slots (all scoped courts) ────────────────────
   useEffect(() => {
-    return subscribeToAllCourtsAdminSlots(selectedDate, setAllCourtsSlots);
-  }, [selectedDate]);
+    const ids = getCourtsByClubId(scopedClubId).map((c) => c.id) as CourtId[];
+    // Pre-populate with empty arrays so metrics don't flash on club change
+    setAllCourtsSlots(Object.fromEntries(ids.map((id) => [id, []])));
+    return subscribeToSelectedCourtsAdminSlots(selectedDate, ids, setAllCourtsSlots);
+  }, [selectedDate, scopedClubId]);
 
+  // ── Subscriptions: prices (all scoped courts) ─────────────────────────────
   useEffect(() => {
-    setCourtPrice(getCourtById(selectedCourtId).basePrice);
-    setEditingPrice(null);
-    return subscribeToCourtPrice(selectedCourtId, (price) => {
-      setCourtPrice(price);
-      setAllPrices((prev) => ({ ...prev, [selectedCourtId]: price }));
-    });
-  }, [selectedCourtId]);
-
-  useEffect(() => {
-    const unsubscribers = COURT_IDS.map((id) =>
-      subscribeToCourtPrice(id, (price) =>
+    const courts = getCourtsByClubId(scopedClubId);
+    // Seed from static config immediately so editor shows a price right away
+    setAllPrices(Object.fromEntries(courts.map((c) => [c.id, c.basePrice])));
+    const unsubs = courts.map(({ id }) =>
+      subscribeToCourtPrice(id as CourtId, (price) =>
         setAllPrices((prev) => ({ ...prev, [id]: price })),
       ),
     );
-    return () => unsubscribers.forEach((u) => u());
-  }, []);
+    return () => unsubs.forEach((u) => u());
+  }, [scopedClubId]);
 
-  // ─── Aggregate metrics ───────────────────────────────────────────────────────
+  // Reset price editor when navigating to a different court
+  useEffect(() => {
+    setEditingPrice(null);
+  }, [selectedCourtId]);
 
+  // ── Aggregate metrics (scoped to current club) ────────────────────────────
   const aggregateMetrics = useMemo(() => {
-    let totalSlots = 0;
+    const scopedIds = getCourtsByClubId(scopedClubId).map((c) => c.id);
+    let totalSlots    = 0;
     let confirmedSlots = 0;
-    let blockedSlots = 0;
-    let revenue = 0;
+    let blockedSlots  = 0;
+    let grossRevenue  = 0;
 
-    for (const courtId of COURT_IDS) {
-      const slots = allCourtsSlots[courtId] ?? [];
+    for (const courtId of scopedIds) {
+      const slots     = allCourtsSlots[courtId] ?? [];
       const confirmed = slots.filter((s) => s.status === 'CONFIRMED').length;
-      const blocked = slots.filter((s) => s.status === 'BLOCKED').length;
-      totalSlots += slots.length;
+      const blocked   = slots.filter((s) => s.status === 'BLOCKED').length;
+      totalSlots     += slots.length;
       confirmedSlots += confirmed;
-      blockedSlots += blocked;
-      revenue += confirmed * (allPrices[courtId] ?? getCourtById(courtId).basePrice);
+      blockedSlots   += blocked;
+      grossRevenue   += confirmed * (allPrices[courtId] ?? getCourtById(courtId).basePrice);
     }
+
+    const commission = Math.round(grossRevenue * COMMISSION_RATE);
+    const netPayout  = grossRevenue - commission;
 
     return {
       occupancy: totalSlots > 0 ? Math.round((confirmedSlots / totalSlots) * 100) : 0,
-      revenue,
+      grossRevenue,
+      netPayout,
+      commission,
       blockedSlots,
     };
-  }, [allCourtsSlots, allPrices]);
+  }, [allCourtsSlots, allPrices, scopedClubId]);
 
-  // ─── Handlers ───────────────────────────────────────────────────────────────
+  // ── Handlers ────────────────────────────────────────────────────────────────
 
-  const handleSelectCourt = useCallback((courtId: CourtId) => {
-    setSelectedCourtId(courtId);
-  }, []);
+  const handleSelectCourt = useCallback((id: CourtId) => setSelectedCourtId(id), []);
 
   const handleSavePrice = useCallback(async () => {
     const parsed = parseInt(editingPrice ?? '', 10);
@@ -313,20 +341,30 @@ export function AdminDashboardScreen() {
 
   const selectedCourt = getCourtById(selectedCourtId);
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  // ── Guard: club_admin with no managedClubId ────────────────────────────────
+  if (isMisconfigured) {
+    return (
+      <View style={[styles.container, styles.centeredGuard, { paddingTop: insets.top }]}>
+        <Text style={styles.guardEmoji}>⚠️</Text>
+        <Text style={styles.guardTitle}>Kulüp Atanmamış</Text>
+        <Text style={styles.guardBody}>
+          Hesabınıza henüz bir kulüp atanmamış.{'\n'}
+          Lütfen platform yöneticinizle iletişime geçin.
+        </Text>
+        <TouchableOpacity
+          style={styles.guardSignOutBtn}
+          onPress={handleSignOut}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.guardSignOutText}>Çıkış Yap</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    /*
-      Layout:
-        View (flex: 1, paddingTop = safeArea top)
-          └── ScrollView (single, owns all vertical scroll)
-                ├── Header
-                ├── Tarih section
-                ├── Günlük Özet (aggregate metrics)
-                ├── Kort Seçimi (CourtPicker)
-                ├── Price editor card
-                └── Günlük Program (slot schedule)
-    */
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView
         style={styles.scrollView}
@@ -334,11 +372,14 @@ export function AdminDashboardScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── 1. Header ──────────────────────────────── */}
+
+        {/* ── 1. Header ──────────────────────────────────────────── */}
         <View style={styles.pageHeader}>
-          <View>
-            <Text style={styles.pageTitle}>Kontrol Paneli</Text>
-            <Text style={styles.pageSubtitle}>{FACILITY_NAME}</Text>
+          <View style={styles.headerTextBlock}>
+            <Text style={styles.pageTitle} numberOfLines={1} adjustsFontSizeToFit>
+              {scopedClub.name}
+            </Text>
+            <Text style={styles.pageSubtitle}>Yönetim Paneli</Text>
           </View>
           <TouchableOpacity
             onPress={handleSignOut}
@@ -349,61 +390,116 @@ export function AdminDashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── 2. Tarih ───────────────────────────────── */}
-        <Text style={styles.sectionLabel}>Tarih</Text>
+        {/* ── 2. Club Selector (super_admin only) ────────────────── */}
+        {role === 'super_admin' && (
+          <>
+            <Text style={styles.sectionLabel}>Kulüp Görünümü</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.clubSelectorRow}
+            >
+              {CLUBS.map((club) => {
+                const isActive = club.id === scopedClubId;
+                return (
+                  <TouchableOpacity
+                    key={club.id}
+                    onPress={() => setSuperAdminClubId(club.id)}
+                    style={[styles.clubPill, isActive && styles.clubPillActive]}
+                    activeOpacity={0.75}
+                  >
+                    <Text
+                      style={[
+                        styles.clubPillText,
+                        isActive && styles.clubPillTextActive,
+                      ]}
+                    >
+                      {club.name}
+                    </Text>
+                    {isActive && (
+                      <View style={styles.clubPillDot} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
+
+        {/* ── 3. Tarih ───────────────────────────────────────────── */}
+        <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>Tarih</Text>
         <HorizontalDayPicker
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
         />
 
-        {/* ── 3. Günlük Özet — aggregate across all courts */}
+        {/* ── 4. Financial Summary (scoped to club) ──────────────── */}
         <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
-          Günlük Özet — Tüm Kortlar
+          Günlük Özet — {scopedCourts.length} Kort
         </Text>
-        <View style={styles.metricsRow}>
-          <MetricCard
-            icon="📊"
-            label="Doluluk Oranı"
-            value={`%${aggregateMetrics.occupancy}`}
-            accent="#22C55E"
-          />
-          <MetricCard
-            icon="💰"
-            label="Bugünkü Ciro"
-            value={`${aggregateMetrics.revenue.toLocaleString('tr-TR')} TL`}
-            accent="#3B82F6"
-          />
-          <MetricCard
-            icon="🔒"
-            label="Bloke Saatler"
-            value={String(aggregateMetrics.blockedSlots)}
-            accent="#F59E0B"
-          />
+
+        <View style={styles.metricsGrid}>
+          {/* Row 1 */}
+          <View style={styles.metricsRow}>
+            <MetricCard
+              icon="📊"
+              label="Doluluk Oranı"
+              value={`%${aggregateMetrics.occupancy}`}
+              accent="#22C55E"
+            />
+            <MetricCard
+              icon="💰"
+              label="Bugünkü Ciro"
+              value={`${aggregateMetrics.grossRevenue.toLocaleString('tr-TR')} TL`}
+              accent="#3B82F6"
+            />
+          </View>
+
+          {/* Row 2 — Financial breakdown */}
+          <View style={[styles.metricsRow, styles.metricsRowGap]}>
+            <MetricCard
+              icon="🏦"
+              label="Net Hakediş"
+              value={`${aggregateMetrics.netPayout.toLocaleString('tr-TR')} TL`}
+              accent="#22C55E"
+              subLabel="%80"
+            />
+            <MetricCard
+              icon="📉"
+              label="Platform Kesintisi"
+              value={`${aggregateMetrics.commission.toLocaleString('tr-TR')} TL`}
+              accent="#F59E0B"
+              subLabel="%20"
+            />
+          </View>
+
+          <Text style={styles.commissionHint}>
+            %{Math.round(COMMISSION_RATE * 100)} platform komisyonu düşülmüş net hakediş tutarı. Bloke:&nbsp;
+            <Text style={styles.commissionHintBold}>
+              {aggregateMetrics.blockedSlots} saat
+            </Text>
+          </Text>
         </View>
 
-        {/* ── 4. Kort Seçimi ─────────────────────────── */}
+        {/* ── 5. Court Selector (filtered to scoped club) ────────── */}
         <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
-          Günlük Kort Seçimi
+          Kort Seçimi
         </Text>
-        {/*
-          Negative horizontal margin breaks CourtPicker out of the parent's
-          paddingHorizontal so it can scroll edge-to-edge.
-          CourtPicker's contentContainerStyle re-applies paddingHorizontal: 20.
-        */}
         <View style={styles.courtPickerWrapper}>
           <CourtPicker
             selectedCourtId={selectedCourtId}
             onSelectCourt={handleSelectCourt}
+            courts={scopedCourts}
             livePrices={allPrices}
           />
         </View>
 
-        {/* ── 5. Price editor ────────────────────────── */}
+        {/* ── 6. Price editor ────────────────────────────────────── */}
         <View style={styles.priceEditorCard}>
           <View style={styles.priceEditorHeader}>
             <View>
               <Text style={styles.priceEditorCourtName}>{selectedCourt.name}</Text>
-              <Text style={styles.priceEditorHint}>Mevcut Saat Ücreti</Text>
+              <Text style={styles.priceEditorHint}>Saatlik Ücret</Text>
             </View>
           </View>
 
@@ -455,7 +551,7 @@ export function AdminDashboardScreen() {
           )}
         </View>
 
-        {/* ── 6. Günlük Program ──────────────────────── */}
+        {/* ── 7. Daily Schedule ──────────────────────────────────── */}
         <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
           Günlük Program — {selectedCourt.name}
         </Text>
@@ -498,15 +594,57 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: HORIZONTAL_PAD,
     paddingTop: 20,
-    paddingBottom: 40,
+    paddingBottom: 48,
   },
 
-  // Header
+  // ── Guard state ──────────────────────────────────────────────────────────────
+  centeredGuard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 36,
+  },
+  guardEmoji: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  guardTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.4,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  guardBody: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  guardSignOutBtn: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  guardSignOutText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+
+  // ── Header ───────────────────────────────────────────────────────────────────
   pageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 24,
+  },
+  headerTextBlock: {
+    flex: 1,
+    marginRight: 12,
   },
   signOutBtn: {
     width: 40,
@@ -515,23 +653,69 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   pageTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     color: '#111827',
     letterSpacing: -0.5,
   },
   pageSubtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    fontWeight: '500',
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: '600',
     color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
 
-  // Section labels
-  sectionLabel: {
+  // ── Club selector (super_admin) ───────────────────────────────────────────
+  clubSelectorRow: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  clubPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    gap: 7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  clubPillActive: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#22C55E',
+    shadowColor: '#22C55E',
+    shadowOpacity: 0.14,
+    elevation: 2,
+  },
+  clubPillText: {
     fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  clubPillTextActive: {
+    color: '#15803D',
+  },
+  clubPillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#22C55E',
+  },
+
+  // ── Section labels ────────────────────────────────────────────────────────
+  sectionLabel: {
+    fontSize: 12,
     fontWeight: '700',
     color: '#6B7280',
     textTransform: 'uppercase',
@@ -542,10 +726,16 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
 
-  // Metrics row
+  // ── Metrics 2×2 grid ──────────────────────────────────────────────────────
+  metricsGrid: {
+    gap: 0,
+  },
   metricsRow: {
     flexDirection: 'row',
     gap: 10,
+  },
+  metricsRowGap: {
+    marginTop: 10,
   },
   metricCard: {
     flex: 1,
@@ -560,7 +750,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
-    gap: 5,
+    gap: 4,
   },
   metricIcon: {
     fontSize: 20,
@@ -579,13 +769,31 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
+  metricSubLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#D1D5DB',
+    letterSpacing: 0.2,
+  },
+  commissionHint: {
+    marginTop: 10,
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '400',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  commissionHintBold: {
+    fontWeight: '700',
+    color: '#6B7280',
+  },
 
-  // CourtPicker breakout
+  // ── CourtPicker breakout ──────────────────────────────────────────────────
   courtPickerWrapper: {
     marginHorizontal: -HORIZONTAL_PAD,
   },
 
-  // Price editor card
+  // ── Price editor card ─────────────────────────────────────────────────────
   priceEditorCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -683,7 +891,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
 
-  // Schedule
+  // ── Schedule ─────────────────────────────────────────────────────────────
   scheduleLoading: {
     height: 160,
     alignItems: 'center',
@@ -707,7 +915,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
 
-  // Slot rows
+  // ── Slot rows ─────────────────────────────────────────────────────────────
   slotRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -745,7 +953,7 @@ const styles = StyleSheet.create({
     minHeight: 34,
   },
 
-  // Status badge
+  // ── Status badge ─────────────────────────────────────────────────────────
   statusBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 8,
@@ -758,7 +966,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // Action buttons
+  // ── Action buttons ────────────────────────────────────────────────────────
   actionBtn: {
     paddingHorizontal: 12,
     paddingVertical: 7,

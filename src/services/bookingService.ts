@@ -365,6 +365,32 @@ export function subscribeToAllCourtsAdminSlots(
   return () => unsubscribers.forEach((u) => u());
 }
 
+/**
+ * Aggregate subscription for an explicit list of courts on a given date.
+ * Used by the multi-tenant admin dashboard to scope metrics to a single club.
+ *
+ * Unlike `subscribeToAllCourtsAdminSlots`, this function is not hardcoded to
+ * any court list — pass only the courts that belong to the active club.
+ */
+export function subscribeToSelectedCourtsAdminSlots(
+  date: string,
+  courtIds: CourtId[],
+  callback: (allSlots: Record<string, AdminSlotInfo[]>) => void,
+): () => void {
+  const state: Record<string, AdminSlotInfo[]> = Object.fromEntries(
+    courtIds.map((id) => [id, buildAdminSlotList(undefined)]),
+  );
+
+  const unsubscribers = courtIds.map((courtId) =>
+    subscribeToAdminSlots(date, courtId, (slots) => {
+      state[courtId] = slots;
+      callback({ ...state });
+    }),
+  );
+
+  return () => unsubscribers.forEach((u) => u());
+}
+
 export async function adminBlockSlot(
   date: string,
   slotTime: string,

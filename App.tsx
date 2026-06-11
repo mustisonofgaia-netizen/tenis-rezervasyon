@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './src/context/AuthContext';
+import { registerForPushNotificationsAsync } from './src/services/notificationService';
 import { AdminDashboardScreen } from './src/screens/AdminDashboardScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { BookingScreen } from './src/screens/BookingScreen';
@@ -21,6 +22,7 @@ import { MatchesScreen } from './src/screens/MatchesScreen';
 import { MyBookingsScreen } from './src/screens/MyBookingsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { auth, db } from './src/services/firebase';
+import type { AdminRole } from './src/types/user';
 import type { ExploreStackParamList, RootTabParamList } from './src/navigation/types';
 
 export type { RootTabParamList, ExploreStackParamList };
@@ -45,7 +47,7 @@ Notifications.setNotificationHandler({
 type AuthState =
   | { phase: 'loading' }
   | { phase: 'unauthenticated' }
-  | { phase: 'ready'; uid: string; role: 'ADMIN' | 'CUSTOMER' };
+  | { phase: 'ready'; uid: string; role: AdminRole; managedClubId: string };
 
 // ─── Custom floating tab bar ──────────────────────────────────────────────────
 
@@ -175,8 +177,6 @@ export default function App() {
   const userUnsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    Notifications.requestPermissionsAsync().catch(() => {});
-
     const authUnsub = onAuthStateChanged(auth, (user) => {
       // Always tear down any previous user-doc listener first
       userUnsubRef.current?.();
@@ -187,18 +187,29 @@ export default function App() {
         return;
       }
 
+      // Register for push notifications on every sign-in (non-blocking)
+      registerForPushNotificationsAsync(user.uid).catch(() => {});
+
       // User is signed in — show spinner while we fetch the role
       setAuthState({ phase: 'loading' });
 
       userUnsubRef.current = onSnapshot(
         doc(db, 'users', user.uid),
         (snap) => {
-          const role = snap.data()?.role === 'ADMIN' ? 'ADMIN' : 'CUSTOMER';
-          setAuthState({ phase: 'ready', uid: user.uid, role });
+          const rawRole = snap.data()?.role as string | undefined;
+          // Normalise legacy 'ADMIN'/'CUSTOMER' values → canonical AdminRole
+          const role: AdminRole =
+            rawRole === 'super_admin' ? 'super_admin'
+            : rawRole === 'club_admin' ? 'club_admin'
+            : rawRole === 'ADMIN'     ? 'super_admin'
+            : 'player';
+          const managedClubId =
+            (snap.data()?.managedClubId as string | undefined) ?? '';
+          setAuthState({ phase: 'ready', uid: user.uid, role, managedClubId });
         },
         () => {
-          // Firestore read error → grant CUSTOMER access rather than blocking
-          setAuthState({ phase: 'ready', uid: user.uid, role: 'CUSTOMER' });
+          // Firestore read error → grant player access rather than blocking
+          setAuthState({ phase: 'ready', uid: user.uid, role: 'player', managedClubId: '' });
         },
       );
     });
@@ -214,9 +225,13 @@ export default function App() {
     if (authState.phase === 'unauthenticated') return <AuthScreen />;
 
     return (
-      <AuthProvider uid={authState.uid}>
+      <AuthProvider
+        uid={authState.uid}
+        role={authState.role}
+        managedClubId={authState.managedClubId}
+      >
         <NavigationContainer>
-          {authState.role === 'ADMIN' ? (
+          {authState.role === 'club_admin' || authState.role === 'super_admin' ? (
             <AdminNavigator />
           ) : (
             <PlayerNavigator />
