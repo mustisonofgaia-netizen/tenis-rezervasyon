@@ -1,22 +1,30 @@
+import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { CompositeNavigationProp, RouteProp } from '@react-navigation/native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import { FirebaseError } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import { ShieldCheck } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Animated, { Easing, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import {
   ActivityIndicator,
   Alert,
-  SafeAreaView,
+  Image,
+  LayoutAnimation,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  UIManager,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { WebView } from 'react-native-webview';
 
 import { BookingSummaryModal } from '../components/BookingSummaryModal';
@@ -57,14 +65,70 @@ type PaymentSession = {
   courtId: CourtId;
 };
 
+const CUBIC_OUT   = Easing.out(Easing.cubic);
+const H_PAD       = 20;
+const SECTION_GAP = 24;
+const TAB_BAR_BOTTOM     = 0;
+const TAB_BAR_HEIGHT     = 68;
+const FOOTER_SAFE_PAD    = 10;
+
+const HERO_IMAGE =
+  'https://images.unsplash.com/photo-1554068865-24cecd4e24b8?w=1200&q=80';
+
+const AMENITIES = [
+  { icon: '🎾', title: 'Zemin', subtitle: 'Toprak Kort' },
+  { icon: '🚿', title: 'Duş & Soyunma', subtitle: 'Odası' },
+  { icon: '☕', title: 'Kafe & Dinlenme', subtitle: 'Alanı' },
+  { icon: '🅿️', title: 'Ücretsiz', subtitle: 'Otopark' },
+] as const;
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+type SectionTitleProps = { children: string };
+
+function SectionTitle({ children }: SectionTitleProps) {
+  return <Text style={styles.sectionTitle}>{children}</Text>;
+}
+
+function TrustBanner() {
+  return (
+    <View style={styles.trustBanner}>
+      <ShieldCheck size={18} color="#15803D" strokeWidth={2.2} />
+      <Text style={styles.trustBannerText}>
+        Ücretsiz İptal: Maça 12 saat kalana kadar kesintisiz iade hakkı.
+      </Text>
+    </View>
+  );
+}
+
+type AmenityCardProps = { icon: string; title: string; subtitle: string };
+
+function AmenityCard({ icon, title, subtitle }: AmenityCardProps) {
+  return (
+    <View style={styles.amenityCard}>
+      <Text style={styles.amenityIcon}>{icon}</Text>
+      <View style={styles.amenityTextWrap}>
+        <Text style={styles.amenityTitle} numberOfLines={1}>{title}</Text>
+        <Text style={styles.amenitySubtitle} numberOfLines={1}>{subtitle}</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
+
 export function BookingScreen() {
   const navigation = useNavigation<BookingNavProp>();
+  const insets     = useSafeAreaInsets();
   const { uid }    = useAuth();
   const { requireVerification } = useVerificationGuard();
   const route      = useRoute<RouteProp<ExploreStackParamList, 'BookingScreen'>>();
   const { clubId } = route.params;
 
-  // Derive club-scoped courts on every render (memoised — only changes when clubId changes)
   const clubCourts = useMemo(() => getCourtsByClubId(clubId), [clubId]);
   const club       = useMemo(() => getClubById(clubId), [clubId]);
 
@@ -80,10 +144,10 @@ export function BookingScreen() {
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [showMockPayment, setShowMockPayment] = useState(false);
   const [paymentSession, setPaymentSession] = useState<PaymentSession | null>(null);
-  // Absolute epoch-ms when the current slot lock expires (lockedAt + 10 min)
   const [lockExpiresAt, setLockExpiresAt] = useState<number>(0);
+  const [bookingToastVisible, setBookingToastVisible] = useState(false);
+  const bookingToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Live prices for THIS club's courts
   const [livePrices, setLivePrices] = useState<Record<string, number>>(() =>
     Object.fromEntries(clubCourts.map((c) => [c.id, c.basePrice])),
   );
@@ -92,9 +156,43 @@ export function BookingScreen() {
   const isProcessing = isLocking || isPaymentLoading;
   const isInPaymentFlow = showMockPayment || paymentUrl !== null;
 
+  const selectedCourt = getCourtById(selectedCourtId);
+  const courtPrice = livePrices[selectedCourtId] ?? selectedCourt.basePrice;
+  const heroImageUrl = club.imageUrl || HERO_IMAGE;
+  const footerBottom = TAB_BAR_BOTTOM + TAB_BAR_HEIGHT + FOOTER_SAFE_PAD + insets.bottom;
+
+  const amenities = useMemo(
+    () =>
+      AMENITIES.map((item, index) =>
+        index === 0
+          ? { ...item, subtitle: `${selectedCourt.surface} Kort` }
+          : item,
+      ),
+    [selectedCourt.surface],
+  );
+
+  const aboutText = useMemo(
+    () =>
+      `${club.name}, ${club.address} konumunda profesyonel kort bakımı ve üst düzey olanaklarla premium bir tenis deneyimi sunar.`,
+    [club.address, club.name],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (bookingToastTimer.current) clearTimeout(bookingToastTimer.current);
+    };
+  }, []);
+
+  const showBookingSuccessToast = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setBookingToastVisible(true);
+    if (bookingToastTimer.current) clearTimeout(bookingToastTimer.current);
+    bookingToastTimer.current = setTimeout(() => setBookingToastVisible(false), 2000);
+  }, []);
+
   // ─── Subscriptions ──────────────────────────────────────────────────────────
 
-  // One subscription per court in this club — live price propagates immediately.
   useEffect(() => {
     const unsubscribers = clubCourts.map(({ id }) =>
       subscribeToCourtPrice(id, (price) =>
@@ -112,12 +210,10 @@ export function BookingScreen() {
     return subscribeToSlots(selectedDate, selectedCourtId, setSlots);
   }, [selectedDate, selectedCourtId]);
 
-  // Deselect slot if it becomes unavailable — but preserve selection if WE hold the lock
   useEffect(() => {
     if (!selectedSlot || isInPaymentFlow || paymentSession) return;
     const found = slots.find((s) => s.time === selectedSlot);
     if (!found || found.status === 'FREE') return;
-    // Keep selected if it's our own lock (re-entry into the payment flow)
     if (found.status === 'LOCKED' && found.lockedBy === uid) return;
     setSelectedSlot(null);
   }, [slots, selectedSlot, isInPaymentFlow, paymentSession, uid]);
@@ -152,6 +248,7 @@ export function BookingScreen() {
 
   const handleBooking = useCallback(() => {
     if (!canSubmit) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     requireVerification(() => setIsModalVisible(true));
   }, [canSubmit, requireVerification]);
 
@@ -176,7 +273,7 @@ export function BookingScreen() {
     setShowMockPayment(false);
     setPaymentSession(null);
     setSelectedSlot(null);
-    // BookingScreen lives inside ExploreStack (native-stack) → navigate up to the tab level
+    showBookingSuccessToast();
     navigation.getParent<BottomTabNavigationProp<RootTabParamList>>()?.navigate('MyBookings');
     Notifications.scheduleNotificationAsync({
       content: {
@@ -185,10 +282,8 @@ export function BookingScreen() {
         sound: true,
       },
       trigger: null,
-    }).catch(() => {
-      // Non-critical — booking already confirmed in Firestore
-    });
-  }, [navigation, selectedCourtId]);
+    }).catch(() => {});
+  }, [navigation, selectedCourtId, showBookingSuccessToast]);
 
   const handleConfirmPayment = useCallback(async () => {
     if (!selectedDate || !selectedSlot || isProcessing) return;
@@ -201,26 +296,21 @@ export function BookingScreen() {
 
     setIsModalVisible(false);
 
-    // ── Re-entry: user already holds the lock for this slot ──────────────────
     const existingSlotInfo = slots.find((s) => s.time === selectedSlot);
     if (
       existingSlotInfo?.status === 'LOCKED' &&
       existingSlotInfo.lockedBy === uid
     ) {
-      // 1. Trust our local session state first (survives modal close, immune to pending writes)
       let expiresAt = lockExpiresAt;
 
-      // 2. If state was lost (e.g., app cold restart), rely on Firestore's real server timestamp
       if (expiresAt === 0 && existingSlotInfo.lockedAt) {
         expiresAt = existingSlotInfo.lockedAt + LOCK_DURATION_MS;
       }
 
-      // 3. Ultimate fallback (only hits during first-ever lock attempt if offline)
       if (expiresAt === 0) {
         expiresAt = Date.now() + LOCK_DURATION_MS;
       }
 
-      // 4. Guard against expired locks
       if (expiresAt <= Date.now()) {
         Alert.alert('Kilit Süresi Doldu', 'Slot kilidi sona erdi. Lütfen tekrar seçin.');
         setSelectedSlot(null);
@@ -233,7 +323,6 @@ export function BookingScreen() {
       return;
     }
 
-    // ── Normal path: acquire a fresh lock ────────────────────────────────────
     setIsLocking(true);
 
     try {
@@ -253,6 +342,7 @@ export function BookingScreen() {
 
       setLockExpiresAt(lockedAt + LOCK_DURATION_MS);
       setPaymentSession(session);
+      showBookingSuccessToast();
 
       if (IS_MOCK_MODE) {
         setIsLocking(false);
@@ -286,13 +376,22 @@ export function BookingScreen() {
 
       Alert.alert('Ödeme Hatası', 'Ödeme başlatılamadı. Lütfen tekrar deneyin.');
     }
-  }, [isProcessing, selectedCourtId, selectedDate, selectedSlot, slots, uid]);
+  }, [
+    isProcessing,
+    lockExpiresAt,
+    selectedCourtId,
+    selectedDate,
+    selectedSlot,
+    showBookingSuccessToast,
+    slots,
+    uid,
+  ]);
 
   // ─── WebView payment screen ──────────────────────────────────────────────────
 
   if (paymentUrl) {
     return (
-      <SafeAreaView style={styles.paymentSafeArea}>
+      <View style={[styles.paymentSafeArea, { paddingTop: insets.top }]}>
         <View style={styles.paymentHeader}>
           <TouchableOpacity
             activeOpacity={0.7}
@@ -314,103 +413,175 @@ export function BookingScreen() {
             </View>
           )}
         />
-      </SafeAreaView>
+      </View>
     );
   }
 
   // ─── Main screen ─────────────────────────────────────────────────────────────
 
-  const selectedCourt = getCourtById(selectedCourtId);
-  const courtPrice = livePrices[selectedCourtId] ?? selectedCourt.basePrice;
-
   return (
-    <SafeAreaView style={styles.safeArea}>
-      {/*
-        Layout:
-          ┌──────────────────────────────┐
-          │  ScrollView — all content    │  flex: 1
-          │    paddingBottom grows when  │
-          │    the CTA footer appears    │
-          ├──────────────────────────────┤
-          │  Sticky CTA footer           │  only rendered when canSubmit
-          └──────────────────────────────┘
-      */}
+    <View style={styles.container}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          // When the sticky CTA is visible, add extra bottom clearance so the
-          // last slot card scrolls fully above the button.
-          canSubmit && styles.scrollContentWithCTA,
+          canSubmit && { paddingBottom: footerBottom + 72 },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Screen title ────────────────────────────── */}
-        <Text style={styles.header}>{club.name}</Text>
+        {/* ── Premium hero header ──────────────────── */}
+        <View style={styles.hero}>
+          <Image source={{ uri: heroImageUrl }} style={styles.heroImage} resizeMode="cover" />
 
-        {IS_MOCK_MODE ? (
-          <View style={styles.mockBanner}>
-            <Text style={styles.mockBannerText}>🧪 Mock ödeme modu aktif</Text>
+          <Svg style={StyleSheet.absoluteFillObject} pointerEvents="none">
+            <Defs>
+              <LinearGradient id="heroGrad" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor="#000000" stopOpacity="0.08" />
+                <Stop offset="0.45" stopColor="#000000" stopOpacity="0.18" />
+                <Stop offset="1" stopColor="#000000" stopOpacity="0.78" />
+              </LinearGradient>
+            </Defs>
+            <Rect width="100%" height="100%" fill="url(#heroGrad)" />
+          </Svg>
+
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => navigation.goBack()}
+            style={[styles.backButton, { top: insets.top + 10 }]}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
+            <Ionicons name="chevron-back" size={22} color="#0F172A" />
+          </TouchableOpacity>
+
+          <View style={styles.heroContent}>
+            <Text style={styles.heroClubName} numberOfLines={2}>{club.name}</Text>
+            <View style={styles.heroAddressRow}>
+              <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
+              <Text style={styles.heroAddress} numberOfLines={1}>{club.address}</Text>
+            </View>
           </View>
-        ) : null}
-
-        {/* ── 1. Tarih ────────────────────────────────── */}
-        <Text style={styles.sectionLabel}>Tarih Seçin</Text>
-        <HorizontalDayPicker
-          selectedDate={selectedDate}
-          onSelectDate={handleSelectDate}
-        />
-
-        {/* ── 2. Kort ─────────────────────────────────── */}
-        <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
-          Kort Seçin
-        </Text>
-        {/*
-          Negative horizontal margin breaks CourtPicker out of the parent's
-          paddingHorizontal so it scrolls edge-to-edge. CourtPicker's own
-          contentContainerStyle re-applies paddingHorizontal: 20 for alignment.
-        */}
-        <View style={styles.courtPickerWrapper}>
-          <CourtPicker
-            courts={clubCourts}
-            selectedCourtId={selectedCourtId}
-            onSelectCourt={handleSelectCourt}
-            livePrices={livePrices}
-          />
         </View>
 
-        {/* ── 3. Saat ─────────────────────────────────── */}
-        <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
-          Saat Seçin
-        </Text>
-        {selectedDate ? (
-          <TimeSlotGrid
-            key={`${selectedCourtId}_${selectedDate}`}
-            slots={slots}
-            onSelectSlot={handleSelectSlot}
-            currentUserId={uid}
-          />
-        ) : (
-          <View style={styles.emptySlotHint}>
-            <Text style={styles.emptySlotIcon}>📅</Text>
-            <Text style={styles.emptySlotText}>
-              Uygun saatleri görmek için{'\n'}bir tarih seçin
-            </Text>
+        <View style={styles.body}>
+          {bookingToastVisible && (
+            <View style={styles.bookingToast} pointerEvents="none">
+              <Ionicons name="checkmark-circle" size={16} color="#15803D" style={{ marginRight: 6 }} />
+              <Text style={styles.bookingToastText}>Slot başarıyla ayrıldı!</Text>
+            </View>
+          )}
+
+          {IS_MOCK_MODE ? (
+            <View style={styles.mockBanner}>
+              <Text style={styles.mockBannerText}>🧪 Mock ödeme modu aktif</Text>
+            </View>
+          ) : null}
+
+          {/* ── Price section ─────────────────────────── */}
+          <View style={styles.priceCard}>
+            <View style={styles.priceMeta}>
+              <Text style={styles.priceLabel}>Seçili Kort</Text>
+              <Text style={styles.priceCourtName} numberOfLines={1}>
+                {selectedCourt.name} · {selectedCourt.surface}
+              </Text>
+            </View>
+            <View style={styles.priceAmountWrap}>
+              <Text style={styles.priceAmount}>₺{courtPrice}</Text>
+              <Text style={styles.priceUnit}>/ saat</Text>
+            </View>
           </View>
-        )}
+
+          <TrustBanner />
+
+          {/* ── Booking flow ──────────────────────────── */}
+          <View style={styles.bookingSection}>
+            <Text style={styles.bookingSectionLabel}>Tarih Seçin</Text>
+            <HorizontalDayPicker
+              selectedDate={selectedDate}
+              onSelectDate={handleSelectDate}
+            />
+          </View>
+
+          <View style={styles.bookingSection}>
+            <Text style={styles.bookingSectionLabel}>Kort Seçin</Text>
+            <View style={styles.courtPickerWrapper}>
+              <CourtPicker
+                courts={clubCourts}
+                selectedCourtId={selectedCourtId}
+                onSelectCourt={handleSelectCourt}
+                livePrices={livePrices}
+              />
+            </View>
+          </View>
+
+          <View style={styles.bookingSection}>
+            <Text style={styles.bookingSectionLabel}>Saat Seçin</Text>
+            {selectedDate ? (
+              <TimeSlotGrid
+                key={`${selectedCourtId}_${selectedDate}`}
+                slots={slots}
+                selectedSlot={selectedSlot}
+                onSelectSlot={handleSelectSlot}
+                currentUserId={uid}
+              />
+            ) : (
+              <View style={styles.emptySlotHint}>
+                <Text style={styles.emptySlotIcon}>📅</Text>
+                <Text style={styles.emptySlotText}>
+                  Uygun saatleri görmek için{'\n'}bir tarih seçin
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* ── İptal Politikası ──────────────────────── */}
+          <View style={styles.contentSection}>
+            <SectionTitle>İptal Politikası</SectionTitle>
+            <View style={styles.policyCard}>
+              <Text style={styles.policyText}>
+                Maç başlangıcına 12 saatten fazla süre varsa rezervasyonunuzu ücretsiz
+                iptal edebilirsiniz. İade tutarı 1–3 iş günü içinde hesabınıza yansır.
+              </Text>
+            </View>
+          </View>
+
+          {/* ── Olanaklar ─────────────────────────────── */}
+          <View style={styles.contentSection}>
+            <SectionTitle>Olanaklar</SectionTitle>
+            <View style={styles.amenitiesGrid}>
+              {amenities.map((item) => (
+                <AmenityCard
+                  key={item.title}
+                  icon={item.icon}
+                  title={item.title}
+                  subtitle={item.subtitle}
+                />
+              ))}
+            </View>
+          </View>
+
+          {/* ── Tesis Hakkında ────────────────────────── */}
+          <View style={styles.contentSection}>
+            <SectionTitle>Tesis Hakkında</SectionTitle>
+            <View style={styles.aboutCard}>
+              <Text style={styles.aboutText}>{aboutText}</Text>
+              <View style={styles.aboutFacilitiesRow}>
+                {club.facilities.map((facility) => (
+                  <View key={facility} style={styles.aboutPill}>
+                    <Text style={styles.aboutPillText}>{facility}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </View>
+        </View>
       </ScrollView>
 
-      {/*
-        Airbnb-style CTA: only rendered when the user has made a selection.
-        Disappears completely when no slot is chosen so it never blocks content.
-        Uses upward shadow instead of a border for premium visual separation.
-      */}
       {canSubmit && (
         <Animated.View
-          entering={SlideInDown.springify().mass(0.3).damping(18).stiffness(120)}
-          exiting={SlideOutDown.duration(200)}
-          style={styles.footer}
+          entering={SlideInDown.duration(320).easing(CUBIC_OUT)}
+          exiting={SlideOutDown.duration(220)}
+          style={[styles.footer, { bottom: footerBottom }]}
         >
           <TouchableOpacity
             activeOpacity={0.85}
@@ -427,7 +598,6 @@ export function BookingScreen() {
         </Animated.View>
       )}
 
-      {/* ── Modals ────────────────────────────────────── */}
       <BookingSummaryModal
         isVisible={isModalVisible}
         onClose={handleCloseModal}
@@ -452,7 +622,6 @@ export function BookingScreen() {
         />
       ) : null}
 
-      {/* Full-screen spinner during Firestore lock + payment init */}
       {isProcessing && (
         <View style={styles.absoluteLoadingOverlay}>
           <View style={styles.loadingCard}>
@@ -461,56 +630,107 @@ export function BookingScreen() {
           </View>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const H_PAD = 20; // horizontal page padding
-
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
 
-  // ── Scroll body ────────────────────────────────────────────────────────────
-  scrollView: {
-    flex: 1,
-  },
+  scrollView: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: TAB_BAR_BOTTOM + TAB_BAR_HEIGHT + FOOTER_SAFE_PAD + 80,
+  },
+
+  // ── Hero ───────────────────────────────────────────────────────────────────
+  hero: {
+    height: 280,
+    position: 'relative',
+    backgroundColor: '#0F172A',
+  },
+  heroImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  backButton: {
+    position: 'absolute',
+    left: H_PAD,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+    zIndex: 2,
+  },
+  heroContent: {
+    position: 'absolute',
+    left: H_PAD,
+    right: H_PAD,
+    bottom: 22,
+    zIndex: 2,
+    gap: 6,
+  },
+  heroClubName: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.6,
+    lineHeight: 34,
+  },
+  heroAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  heroAddress: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.88)',
+  },
+
+  // ── Body ───────────────────────────────────────────────────────────────────
+  body: {
     paddingHorizontal: H_PAD,
-    paddingTop: 28,
-    // 100 px clears the floating tab bar (bottom:24 + height:64 + ~12 gap)
-    // even when the CTA button is not visible.
-    paddingBottom: 100,
-  },
-  // Applied on top of scrollContent when the CTA footer is visible
-  scrollContentWithCTA: {
-    // 220 px clears the 54 px CTA button sitting at bottom:104 above the
-    // floating tab bar, ensuring the last slot row scrolls fully into view.
-    paddingBottom: 220,
+    paddingTop: SECTION_GAP,
+    gap: SECTION_GAP,
   },
 
-  // ── Page title ─────────────────────────────────────────────────────────────
-  header: {
-    fontSize: 30,
-    fontWeight: '700',
-    color: '#0F172A',
-    letterSpacing: -0.8,
-    marginBottom: 24,
+  bookingToast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  bookingToastText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#15803D',
   },
 
-  // ── Mock mode banner ───────────────────────────────────────────────────────
   mockBanner: {
     backgroundColor: '#FEF3C7',
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    marginBottom: 24,
-    marginTop: -4,
   },
   mockBannerText: {
     fontSize: 13,
@@ -519,32 +739,88 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── Section labels ─────────────────────────────────────────────────────────
-  sectionLabel: {
+  // ── Price ──────────────────────────────────────────────────────────────────
+  priceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  priceMeta: { flex: 1, marginRight: 12, gap: 4 },
+  priceLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  priceCourtName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.2,
+  },
+  priceAmountWrap: { alignItems: 'flex-end' },
+  priceAmount: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.5,
+  },
+  priceUnit: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+
+  // ── Trust banner ───────────────────────────────────────────────────────────
+  trustBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+  },
+  trustBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#166534',
+    lineHeight: 19,
+  },
+
+  // ── Booking sections ───────────────────────────────────────────────────────
+  bookingSection: { gap: 14 },
+  bookingSectionLabel: {
     fontSize: 17,
     fontWeight: '700',
     color: '#111827',
     letterSpacing: -0.3,
-    marginBottom: 14,
   },
-  sectionLabelSpaced: {
-    marginTop: 32,
-  },
-
-  // ── CourtPicker edge-to-edge breakout ──────────────────────────────────────
   courtPickerWrapper: {
     marginHorizontal: -H_PAD,
   },
 
-  // ── Empty-state hint for the slot grid ─────────────────────────────────────
   emptySlotHint: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 36,
     gap: 10,
   },
-  emptySlotIcon: {
-    fontSize: 36,
-  },
+  emptySlotIcon: { fontSize: 36 },
   emptySlotText: {
     fontSize: 15,
     color: '#6B7280',
@@ -552,36 +828,121 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  // ── Floating CTA footer ────────────────────────────────────────────────────
-  // Sits above the floating tab bar (bottom:24 + height:64 + 16px gap = 104).
-  // Transparent container lets the scroll content show through underneath.
+  // ── Content sections ───────────────────────────────────────────────────────
+  contentSection: { gap: 14 },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+  },
+
+  policyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+  },
+  policyText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    lineHeight: 22,
+  },
+
+  amenitiesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  amenityCard: {
+    width: '48%',
+    flexGrow: 1,
+    flexBasis: '46%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+  },
+  amenityIcon: { fontSize: 22 },
+  amenityTextWrap: { flex: 1, gap: 1 },
+  amenityTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  amenitySubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+
+  aboutCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    gap: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+  },
+  aboutText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    lineHeight: 22,
+  },
+  aboutFacilitiesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  aboutPill: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  aboutPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
+
+  // ── Sticky footer ──────────────────────────────────────────────────────────
   footer: {
     position: 'absolute',
-    bottom: 104,
-    left: 20,
-    right: 20,
+    left: H_PAD,
+    right: H_PAD,
     backgroundColor: 'transparent',
   },
   submitButton: {
-    height: 54,
-    backgroundColor: '#22C55E',
-    borderRadius: 14,
+    height: 58,
+    backgroundColor: '#0F172A',
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#22C55E',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.32,
+    shadowRadius: 10,
+    elevation: 10,
+    transform: [{ scale: 1.02 }],
   },
   submitButtonText: {
     fontSize: 17,
     fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
 
-  // ── Full-screen loading overlay ────────────────────────────────────────────
+  // ── Loading overlay ────────────────────────────────────────────────────────
   absoluteLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(17, 24, 39, 0.5)',
@@ -612,7 +973,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── WebView payment screen ─────────────────────────────────────────────────
+  // ── WebView payment ────────────────────────────────────────────────────────
   paymentSafeArea: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -642,9 +1003,7 @@ const styles = StyleSheet.create({
     color: '#111827',
     letterSpacing: -0.2,
   },
-  paymentHeaderSpacer: {
-    minWidth: 110,
-  },
+  paymentHeaderSpacer: { minWidth: 110 },
   webView: {
     flex: 1,
     backgroundColor: '#F9FAFB',
