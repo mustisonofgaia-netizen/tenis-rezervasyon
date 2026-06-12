@@ -1,15 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  LayoutAnimation,
+  Platform,
   SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  UIManager,
   View,
 } from 'react-native';
 
@@ -23,6 +26,7 @@ import {
 } from '../services/matchService';
 import {
   avatarColor,
+  getParticipantLabel,
   profileCache,
   resolveProfile,
 } from '../services/userService';
@@ -43,7 +47,20 @@ const SKILL_LABEL: Record<SkillLevel, string> = {
   ADVANCED:     'İleri Seviye',
 };
 
-// Profile cache + helpers are imported from userService (shared singleton).
+const CARD_RADIUS = 20;
+const H_PAD       = 24;
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+function fallbackProfile(playerUid: string): UserProfile {
+  return {
+    initial: (playerUid[0] ?? '?').toUpperCase(),
+    color: avatarColor(playerUid),
+    displayName: null,
+  };
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -143,55 +160,56 @@ function MatchCard({
         <Text style={styles.courtText}>{courtLabel}</Text>
       </View>
 
-      {/* ── Player avatars ───────────────────── */}
-      <View style={styles.avatarRow}>
+      {/* ── Participants ──────────────────────── */}
+      <View style={styles.playerList}>
         {match.joinedPlayers.map((playerUid) => {
-          const profile = profiles[playerUid] ?? {
-            initial: (playerUid[0] ?? '?').toUpperCase(),
-            color: avatarColor(playerUid),
-          };
+          const profile      = profiles[playerUid] ?? fallbackProfile(playerUid);
           const isPlayerHost = playerUid === match.hostId;
-          const canKick = isHost && !isPlayerHost && !isRemoving;
+          const canKick      = isHost && !isPlayerHost && !isRemoving;
+          const label        = getParticipantLabel(profile, playerUid, uid);
 
           return (
-            <View key={playerUid} style={styles.avatarWrapper}>
-              {/* Circle */}
-              <View style={[styles.avatar, { backgroundColor: profile.color }]}>
-                <Text style={styles.avatarInitial}>{profile.initial}</Text>
-              </View>
-
-              {/* 👑 Host crown */}
-              {isPlayerHost && (
-                <View style={styles.crownBadge}>
-                  <Text style={styles.crownText}>👑</Text>
+            <View key={playerUid} style={styles.playerRow}>
+              <View style={styles.avatarWrapper}>
+                <View style={[styles.avatar, { backgroundColor: profile.color }]}>
+                  <Text style={styles.avatarInitial}>{profile.initial}</Text>
                 </View>
-              )}
-
-              {/* × Kick button (host only, non-host players) */}
-              {canKick && (
-                <TouchableOpacity
-                  style={styles.kickBtn}
-                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                  onPress={() => handleKickPress(playerUid)}
-                >
-                  <Ionicons name="close-circle" size={18} color="#EF4444" />
-                </TouchableOpacity>
-              )}
+                {isPlayerHost && (
+                  <View style={styles.crownBadge}>
+                    <Text style={styles.crownText}>👑</Text>
+                  </View>
+                )}
+                {canKick && (
+                  <TouchableOpacity
+                    style={styles.kickBtn}
+                    hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                    onPress={() => handleKickPress(playerUid)}
+                  >
+                    <Ionicons name="close-circle" size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <Text style={styles.playerName} numberOfLines={1}>
+                {label}
+                {isPlayerHost ? '  ·  Kurucu' : ''}
+              </Text>
             </View>
           );
         })}
 
-        {/* Empty slots */}
         {Array.from({ length: emptySlots }, (_, i) => (
-          <View key={`empty-${i}`} style={[styles.avatar, styles.avatarEmpty]}>
-            <Ionicons name="add-outline" size={15} color="#CBD5E1" />
+          <View key={`empty-${i}`} style={styles.playerRow}>
+            <View style={[styles.avatar, styles.avatarEmpty]}>
+              <Ionicons name="add-outline" size={15} color="#CBD5E1" />
+            </View>
+            <Text style={styles.emptySlotLabel}>Boş yer</Text>
           </View>
         ))}
-
-        <Text style={styles.playerCountText}>
-          {match.joinedPlayers.length}/{match.requiredPlayers}
-        </Text>
       </View>
+
+      <Text style={styles.playerCountText}>
+        {match.joinedPlayers.length}/{match.requiredPlayers} oyuncu
+      </Text>
 
       {/* ── CTA ─────────────────────────────── */}
       {isHost ? (
@@ -244,10 +262,27 @@ export function MatchesScreen() {
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [profiles, setProfiles]   = useState<Record<string, UserProfile>>({});
+  const [joinToastVisible, setJoinToastVisible] = useState(false);
+  const joinToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (joinToastTimer.current) clearTimeout(joinToastTimer.current);
+    };
+  }, []);
+
+  const showJoinSuccessToast = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setJoinToastVisible(true);
+    if (joinToastTimer.current) clearTimeout(joinToastTimer.current);
+    joinToastTimer.current = setTimeout(() => setJoinToastVisible(false), 2000);
+  }, []);
 
   // ── Matches subscription ──────────────────────────────────────────────────
   useEffect(() => {
     return subscribeToOpenMatches((data) => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setMatches(data);
       setIsLoading(false);
     });
@@ -294,6 +329,7 @@ export function MatchesScreen() {
         setJoiningId(matchId);
         try {
           await joinMatch(matchId, uid);
+          showJoinSuccessToast();
         } catch (error) {
           const msg = error instanceof Error ? error.message : 'Katılım başarısız oldu.';
           Alert.alert('Hata', msg);
@@ -302,7 +338,7 @@ export function MatchesScreen() {
         }
       });
     },
-    [requireVerification, uid],
+    [requireVerification, showJoinSuccessToast, uid],
   );
 
   const handleRemovePlayer = useCallback(
@@ -328,6 +364,13 @@ export function MatchesScreen() {
         <Text style={styles.headerTitle}>Lobi</Text>
         <Text style={styles.headerSubtitle}>Maç bul, partner eşleş</Text>
       </View>
+
+      {joinToastVisible && (
+        <View style={styles.joinToast} pointerEvents="none">
+          <Ionicons name="checkmark-circle" size={16} color="#15803D" style={{ marginRight: 6 }} />
+          <Text style={styles.joinToastText}>Maç başarıyla eklendi!</Text>
+        </View>
+      )}
 
       {/* ── Content ─────────────────────────── */}
       {isLoading ? (
@@ -372,7 +415,7 @@ const styles = StyleSheet.create({
 
   // ── Header ───────────────────────────────────────────────────────────────
   headerSection: {
-    paddingHorizontal: 24,
+    paddingHorizontal: H_PAD,
     paddingTop: 28,
     paddingBottom: 20,
   },
@@ -398,7 +441,7 @@ const styles = StyleSheet.create({
 
   // ── List ─────────────────────────────────────────────────────────────────
   listContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: H_PAD,
     paddingBottom: 120,
   },
   listContentEmpty: {
@@ -409,7 +452,7 @@ const styles = StyleSheet.create({
   // ── Card ─────────────────────────────────────────────────────────────────
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: CARD_RADIUS,
     padding: 20,
     marginBottom: 14,
     shadowColor: '#000000',
@@ -417,6 +460,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07,
     shadowRadius: 12,
     elevation: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -468,14 +513,16 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
 
-  // ── Avatar row ────────────────────────────────────────────────────────────
-  avatarRow: {
+  // ── Player list ───────────────────────────────────────────────────────────
+  playerList: {
+    gap: 10,
+    marginBottom: 10,
+  },
+  playerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 18,
-    gap: 4,
+    gap: 12,
   },
-  // Extra padding around avatar circle to give absolute badges room to breathe
   avatarWrapper: {
     width: 44,
     height: 44,
@@ -539,11 +586,45 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  playerName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+    letterSpacing: -0.1,
+  },
+  emptySlotLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#9CA3AF',
+  },
   playerCountText: {
-    marginLeft: 4,
+    marginBottom: 14,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  joinToast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginHorizontal: H_PAD,
+    marginBottom: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  joinToastText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: '#15803D',
   },
 
   // ── Join button ───────────────────────────────────────────────────────────

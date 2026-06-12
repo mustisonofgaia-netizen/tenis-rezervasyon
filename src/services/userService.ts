@@ -3,7 +3,12 @@ import { db } from './firebase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type UserProfile = { initial: string; color: string };
+export type UserProfile = {
+  initial: string;
+  color: string;
+  /** Full name when first + last are stored; otherwise null. */
+  displayName: string | null;
+};
 
 // ─── Avatar colour palette ────────────────────────────────────────────────────
 
@@ -20,46 +25,66 @@ export function avatarColor(uid: string): string {
 }
 
 // ─── Module-level cache ───────────────────────────────────────────────────────
-// Single instance shared by every component that imports this module.
-// Survives re-renders and navigation; cleared only on full app reload.
 
 export const profileCache = new Map<string, UserProfile>();
 
+export function invalidateProfileCache(uid: string): void {
+  profileCache.delete(uid);
+}
+
+// ─── Profile builders ─────────────────────────────────────────────────────────
+
+function buildProfile(uid: string, data: Record<string, unknown> | undefined): UserProfile {
+  const firstName = ((data?.firstName as string | undefined) ?? '').trim();
+  const lastName  = ((data?.lastName  as string | undefined) ?? '').trim();
+  const email     = ((data?.email     as string | undefined) ?? '').trim();
+
+  const displayName =
+    firstName && lastName ? `${firstName} ${lastName}`
+    : firstName || lastName || null;
+
+  let initial: string;
+  if (firstName && lastName) {
+    initial = `${firstName[0]}${lastName[0]}`.toUpperCase();
+  } else if (displayName) {
+    initial = displayName[0]!.toUpperCase();
+  } else if (email) {
+    initial = email[0]!.toUpperCase();
+  } else {
+    initial = (uid[0] ?? '?').toUpperCase();
+  }
+
+  return { initial, color: avatarColor(uid), displayName };
+}
+
+/** Lobby-safe participant label — never exposes raw UID. */
+export function getParticipantLabel(
+  profile: UserProfile,
+  playerUid: string,
+  currentUid: string,
+): string {
+  if (playerUid === currentUid) return 'Sen';
+  return profile.displayName ?? 'Oyuncu';
+}
+
 // ─── Profile resolver ─────────────────────────────────────────────────────────
 
-/**
- * Returns the `UserProfile` for a given uid.
- * Reads `users/{uid}.email` from Firestore on first call; subsequent calls
- * are served from the in-memory cache without any network traffic.
- */
 export async function resolveProfile(uid: string): Promise<UserProfile> {
   const cached = profileCache.get(uid);
   if (cached) return cached;
 
   try {
     const snap = await getDoc(doc(db, 'users', uid));
-    const email = (snap.data()?.email as string | undefined) ?? uid;
-    const profile: UserProfile = { initial: email[0].toUpperCase(), color: avatarColor(uid) };
+    const profile = buildProfile(uid, snap.data());
     profileCache.set(uid, profile);
     return profile;
   } catch {
-    const profile: UserProfile = {
-      initial: (uid[0] ?? '?').toUpperCase(),
-      color: avatarColor(uid),
-    };
+    const profile = buildProfile(uid, undefined);
     profileCache.set(uid, profile);
     return profile;
   }
 }
 
-// ─── Batch helper ─────────────────────────────────────────────────────────────
-
-/**
- * Resolves profiles for all `uids`, returning a `Record<uid, UserProfile>`.
- * Uses the cache for already-known profiles; fires Firestore reads only for
- * unknowns. Gracefully degrades — failures populate a fallback entry so
- * callers always receive a complete map.
- */
 export async function resolveProfiles(
   uids: string[],
 ): Promise<Record<string, UserProfile>> {

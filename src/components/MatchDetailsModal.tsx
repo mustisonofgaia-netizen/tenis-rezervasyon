@@ -491,7 +491,7 @@ export function MatchDetailsModal({
 
             <View style={styles.playerList}>
               {match.joinedPlayers.map((playerUid) => {
-                const profile       = profiles[playerUid] ?? { initial: (playerUid[0] ?? '?').toUpperCase(), color: avatarColor(playerUid) };
+                const profile       = profiles[playerUid] ?? { initial: (playerUid[0] ?? '?').toUpperCase(), color: avatarColor(playerUid), displayName: null };
                 const isPlayerHost  = playerUid === match.hostId;
                 const isCurrentUser = playerUid === uid;
                 const canKick       = isHost && !isPlayerHost;
@@ -571,7 +571,7 @@ export function MatchDetailsModal({
                 <Text style={styles.scoreSublabel}>Kazanan Oyuncu</Text>
                 <View style={styles.winnerPills}>
                   {match.joinedPlayers.map((playerUid) => {
-                    const profile    = profiles[playerUid] ?? { initial: (playerUid[0] ?? '?').toUpperCase(), color: avatarColor(playerUid) };
+                    const profile    = profiles[playerUid] ?? { initial: (playerUid[0] ?? '?').toUpperCase(), color: avatarColor(playerUid), displayName: null };
                     const isSelected = selectedWinnerId === playerUid;
                     return (
                       <TouchableOpacity

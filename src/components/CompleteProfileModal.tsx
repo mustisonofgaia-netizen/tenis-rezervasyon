@@ -28,6 +28,7 @@ import {
 } from 'react-native';
 
 import { db } from '../services/firebase';
+import { invalidateProfileCache } from '../services/userService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -110,7 +111,8 @@ export function CompleteProfileModal({
         },
         { merge: true },
       );
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      invalidateProfileCache(uid);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       onComplete();
     } catch {
       Alert.alert('Hata', 'Profil güncellenemedi. Lütfen tekrar deneyin.');
