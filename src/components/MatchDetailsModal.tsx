@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Animated, {
   Easing,
   FadeIn,
@@ -10,13 +11,6 @@ import Animated, {
   SlideInDown,
   SlideOutDown,
 } from 'react-native-reanimated';
-
-const CUBIC_OUT = Easing.out(Easing.cubic);
-const SHEET_ENTER = SlideInDown.duration(360).easing(CUBIC_OUT);
-const SHEET_EXIT  = SlideOutDown.duration(250);
-const FADE_DOWN   = FadeInDown.duration(400).easing(CUBIC_OUT);
-const LAYOUT      = LinearTransition.duration(300).easing(CUBIC_OUT);
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -30,8 +24,10 @@ import {
 } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
+import { useVerificationGuard } from '../hooks/useVerificationGuard';
 import {
   cancelMatchListing,
+  joinMatch,
   LEAVE_LOCK_HOURS,
   leaveMatch,
   removePlayerFromMatch,
@@ -39,11 +35,19 @@ import {
 import { submitMatchScore, updateMatchScore } from '../services/scoreService';
 import {
   avatarColor,
+  getParticipantLabel,
   profileCache,
   resolveProfile,
 } from '../services/userService';
 import type { UserProfile } from '../services/userService';
 import type { MatchDocument, SkillLevel } from '../types/match';
+
+const CUBIC_OUT    = Easing.out(Easing.cubic);
+const SHEET_ENTER  = SlideInDown.duration(360).easing(CUBIC_OUT);
+const SHEET_EXIT   = SlideOutDown.duration(250);
+const FADE_DOWN    = FadeInDown.duration(400).easing(CUBIC_OUT);
+const LAYOUT       = LinearTransition.duration(300).easing(CUBIC_OUT);
+const CARD_PAD     = 18;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -107,6 +111,50 @@ function parseSets(score: string, startId: number): ScoreSet[] {
       opponentScore: isNaN(parts[1] ?? NaN) ? 0 : (parts[1] ?? 0),
     };
   });
+}
+
+function fallbackProfile(playerUid: string): UserProfile {
+  return {
+    initial: (playerUid[0] ?? '?').toUpperCase(),
+    color: avatarColor(playerUid),
+    displayName: null,
+  };
+}
+
+// ─── Sub-component: CapacityIndicator ─────────────────────────────────────────
+
+type CapacityIndicatorProps = {
+  joined: number;
+  required: number;
+  isFull: boolean;
+};
+
+function CapacityIndicator({ joined, required, isFull }: CapacityIndicatorProps) {
+  const fillRatio    = required > 0 ? joined / required : 0;
+  const isAlmostFull = !isFull && fillRatio >= 0.75;
+  const accentColor  = isFull ? '#F59E0B' : isAlmostFull ? '#3B82F6' : '#22C55E';
+  const statusLabel  = isFull ? 'Dolu' : isAlmostFull ? 'Son yerler!' : 'Açık';
+
+  return (
+    <View style={styles.capacityCard}>
+      <View style={styles.capacityHeader}>
+        <Text style={styles.capacityTitle}>
+          {joined}/{required} Oyuncu
+        </Text>
+        <View style={[styles.capacityPill, { backgroundColor: `${accentColor}18`, borderColor: `${accentColor}40` }]}>
+          <Text style={[styles.capacityPillText, { color: accentColor }]}>{statusLabel}</Text>
+        </View>
+      </View>
+      <View style={styles.progressTrack}>
+        <View
+          style={[
+            styles.progressFill,
+            { width: `${Math.min(100, fillRatio * 100)}%`, backgroundColor: accentColor },
+          ]}
+        />
+      </View>
+    </View>
+  );
 }
 
 // ─── Sub-component: StepButton ────────────────────────────────────────────────
@@ -178,6 +226,7 @@ export function MatchDetailsModal({
   onClose,
 }: MatchDetailsModalProps) {
   const { uid } = useAuth();
+  const { requireVerification } = useVerificationGuard();
 
   const nextSetId = useRef(1);
 
@@ -189,8 +238,10 @@ export function MatchDetailsModal({
   const [isEditingScore,   setIsEditingScore]   = useState(false);
   const [isCancelling,     setIsCancelling]     = useState(false);
   const [isLeaving,        setIsLeaving]        = useState(false);
+  const [isJoining,        setIsJoining]        = useState(false);
 
   const isHost     = match.hostId === uid;
+  const hasJoined  = match.joinedPlayers.includes(uid);
   const isFull     = match.status === 'FULL';
   const skillColor = SKILL_COLOR[match.skillLevel];
   const skillLabel = SKILL_LABEL[match.skillLevel];
@@ -211,8 +262,9 @@ export function MatchDetailsModal({
   const showCancelButton = !isMatchInPast && isHost && !match.isScored;
 
   // Participant (non-host) can leave; locked within 12 h of start
-  const showLeaveButton = !isHost && !isMatchInPast && match.joinedPlayers.includes(uid);
+  const showLeaveButton = !isHost && !isMatchInPast && hasJoined;
   const isLeaveLocked   = hoursUntilMatch < LEAVE_LOCK_HOURS;
+  const showJoinButton  = !isHost && !hasJoined && !isFull && !isMatchInPast && !match.isScored;
 
   // ── Derived score string ──────────────────────────────────────────────────
   const scoreString = sets.map((s) => `${s.hostScore}-${s.opponentScore}`).join(', ');
@@ -227,6 +279,7 @@ export function MatchDetailsModal({
     setIsSubmitting(false);
     setIsEditingScore(false);
     setIsLeaving(false);
+    setIsJoining(false);
   }, [match.id]);
 
   // ── Reset editing flag when modal closes ──────────────────────────────────
@@ -372,6 +425,22 @@ export function MatchDetailsModal({
     );
   }, [isLeaveLocked, match.id, uid, onClose]);
 
+  const handleJoin = useCallback(() => {
+    requireVerification(async () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      setIsJoining(true);
+      try {
+        await joinMatch(match.id, uid);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Katılım başarısız oldu.';
+        Alert.alert('Hata', msg);
+      } finally {
+        setIsJoining(false);
+      }
+    });
+  }, [match.id, requireVerification, uid]);
+
   // ── Submit / update score ─────────────────────────────────────────────────
   const handleSubmitScore = useCallback(async () => {
     if (!selectedWinnerId || !canSave) return;
@@ -432,19 +501,20 @@ export function MatchDetailsModal({
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-            {/* ── Status + skill ─────────────────────── */}
+          <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={styles.scrollContent}>
+            {/* ── Skill + capacity ─────────────────────── */}
             <View style={styles.metaRow}>
-              <View style={[styles.statusPill, isFull ? styles.statusFull : styles.statusOpen]}>
-                <Text style={[styles.statusText, isFull ? styles.statusTextFull : styles.statusTextOpen]}>
-                  {isFull ? `${match.joinedPlayers.length}/${match.requiredPlayers} KONTENJAN DOLDU` : 'AÇIK'}
-                </Text>
-              </View>
               <View style={[styles.skillPill, { backgroundColor: `${skillColor}1A` }]}>
                 <View style={[styles.skillDot, { backgroundColor: skillColor }]} />
                 <Text style={[styles.skillText, { color: skillColor }]}>{skillLabel}</Text>
               </View>
             </View>
+
+            <CapacityIndicator
+              joined={match.joinedPlayers.length}
+              required={match.requiredPlayers}
+              isFull={isFull}
+            />
 
             {/* ── Final score result card ─────────────── */}
             {showScoreResult && (
@@ -486,62 +556,73 @@ export function MatchDetailsModal({
 
             <View style={styles.divider} />
 
-            {/* ── Players ─────────────────────────────── */}
-            <Text style={styles.sectionLabel}>Oyuncular</Text>
+            {/* ── Participants card ──────────────────── */}
+            <View style={styles.participantsCard}>
+              <Text style={styles.sectionLabel}>Katılımcılar</Text>
 
-            <View style={styles.playerList}>
-              {match.joinedPlayers.map((playerUid) => {
-                const profile       = profiles[playerUid] ?? { initial: (playerUid[0] ?? '?').toUpperCase(), color: avatarColor(playerUid), displayName: null };
-                const isPlayerHost  = playerUid === match.hostId;
-                const isCurrentUser = playerUid === uid;
-                const canKick       = isHost && !isPlayerHost;
-                const isBeingRemoved= removingUid === playerUid;
-                const isWinner      = showScoreResult && playerUid === match.winnerId;
+              <View style={styles.playerList}>
+                {match.joinedPlayers.map((playerUid) => {
+                  const profile        = profiles[playerUid] ?? fallbackProfile(playerUid);
+                  const isPlayerHost   = playerUid === match.hostId;
+                  const canKick        = isHost && !isPlayerHost && !showScoreResult;
+                  const isBeingRemoved = removingUid === playerUid;
+                  const isWinner       = showScoreResult && playerUid === match.winnerId;
+                  const displayLabel   = getParticipantLabel(profile, playerUid, uid);
 
-                return (
-                  <View key={playerUid} style={styles.playerRow}>
-                    <View style={styles.playerAvatarWrapper}>
-                      <View style={[styles.playerAvatar, { backgroundColor: profile.color }, isWinner && styles.playerAvatarWinner]}>
-                        <Text style={styles.playerAvatarInitial}>{profile.initial}</Text>
+                  return (
+                    <View key={playerUid} style={styles.playerRow}>
+                      <View style={styles.playerAvatarWrapper}>
+                        <View style={[styles.playerAvatar, { backgroundColor: profile.color }, isWinner && styles.playerAvatarWinner]}>
+                          <Text style={styles.playerAvatarInitial}>{profile.initial}</Text>
+                        </View>
+                        {isWinner && (
+                          <View style={styles.trophyBadge}>
+                            <Text style={styles.trophyText}>🏆</Text>
+                          </View>
+                        )}
                       </View>
-                      {isPlayerHost && <View style={styles.crownBadge}><Text style={styles.crownText}>👑</Text></View>}
-                      {isWinner      && <View style={styles.trophyBadge}><Text style={styles.trophyText}>🏆</Text></View>}
-                    </View>
 
-                    <View style={styles.playerInfo}>
-                      <View style={styles.playerNameRow}>
-                        <Text style={styles.playerRole}>
-                          {isPlayerHost ? 'Maç Sahibi' : 'Katılımcı'}{isCurrentUser ? ' · Sen' : ''}
-                        </Text>
-                        {isWinner && <View style={styles.winnerTag}><Text style={styles.winnerTagText}>Kazanan</Text></View>}
+                      <View style={styles.playerInfo}>
+                        <View style={styles.playerNameRow}>
+                          <Text style={styles.playerName} numberOfLines={1}>{displayLabel}</Text>
+                          {isPlayerHost && (
+                            <View style={styles.hostBadge}>
+                              <Text style={styles.hostBadgeText}>🎾 Kurucu (Host)</Text>
+                            </View>
+                          )}
+                          {isWinner && (
+                            <View style={styles.winnerTag}>
+                              <Text style={styles.winnerTagText}>Kazanan</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
-                      <Text style={styles.playerUid} numberOfLines={1}>{playerUid.slice(0, 12)}…</Text>
+
+                      {canKick && (
+                        <TouchableOpacity
+                          disabled={isBeingRemoved}
+                          onPress={() => handleKick(playerUid)}
+                          style={styles.kickBtn}
+                          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                        >
+                          {isBeingRemoved
+                            ? <ActivityIndicator size="small" color="#EF4444" />
+                            : <Ionicons name="close-circle-outline" size={22} color="#EF4444" />}
+                        </TouchableOpacity>
+                      )}
                     </View>
+                  );
+                })}
 
-                    {canKick && !showScoreResult && (
-                      <TouchableOpacity
-                        disabled={isBeingRemoved}
-                        onPress={() => handleKick(playerUid)}
-                        style={styles.kickBtn}
-                        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                      >
-                        {isBeingRemoved
-                          ? <ActivityIndicator size="small" color="#EF4444" />
-                          : <Ionicons name="close-circle-outline" size={22} color="#EF4444" />}
-                      </TouchableOpacity>
-                    )}
+                {Array.from({ length: emptySlots }, (_, i) => (
+                  <View key={`empty-${i}`} style={[styles.playerRow, styles.playerRowEmpty]}>
+                    <View style={[styles.playerAvatar, styles.playerAvatarEmpty]}>
+                      <Ionicons name="add-outline" size={17} color="#CBD5E1" />
+                    </View>
+                    <Text style={styles.emptySlotText}>Boş yer — katılmayı bekliyor</Text>
                   </View>
-                );
-              })}
-
-              {Array.from({ length: emptySlots }, (_, i) => (
-                <View key={`empty-${i}`} style={[styles.playerRow, styles.playerRowEmpty]}>
-                  <View style={[styles.playerAvatar, styles.playerAvatarEmpty]}>
-                    <Ionicons name="add-outline" size={17} color="#CBD5E1" />
-                  </View>
-                  <Text style={styles.emptySlotText}>Boş yer</Text>
-                </View>
-              ))}
+                ))}
+              </View>
             </View>
 
             {/* ── No-keyboard score entry (new + edit mode) ── */}
@@ -571,8 +652,9 @@ export function MatchDetailsModal({
                 <Text style={styles.scoreSublabel}>Kazanan Oyuncu</Text>
                 <View style={styles.winnerPills}>
                   {match.joinedPlayers.map((playerUid) => {
-                    const profile    = profiles[playerUid] ?? { initial: (playerUid[0] ?? '?').toUpperCase(), color: avatarColor(playerUid), displayName: null };
+                    const profile    = profiles[playerUid] ?? fallbackProfile(playerUid);
                     const isSelected = selectedWinnerId === playerUid;
+                    const label      = getParticipantLabel(profile, playerUid, uid);
                     return (
                       <TouchableOpacity
                         key={playerUid}
@@ -584,8 +666,8 @@ export function MatchDetailsModal({
                           <Text style={styles.winnerPillAvatarText}>{profile.initial}</Text>
                         </View>
                         <Text style={[styles.winnerPillLabel, isSelected && styles.winnerPillLabelSelected]}>
-                          {playerUid === match.hostId ? 'Kurucu' : 'Katılımcı'}
-                          {playerUid === uid ? ' (Sen)' : ''}
+                          {label}
+                          {playerUid === match.hostId ? ' · Kurucu' : ''}
                         </Text>
                         {isSelected && <Ionicons name="checkmark-circle" size={16} color="#22C55E" />}
                       </TouchableOpacity>
@@ -717,6 +799,23 @@ export function MatchDetailsModal({
               </Animated.View>
             )}
           </ScrollView>
+
+          {showJoinButton && (
+            <View style={styles.stickyFooter}>
+              <TouchableOpacity
+                style={styles.joinButton}
+                activeOpacity={0.85}
+                disabled={isJoining}
+                onPress={handleJoin}
+              >
+                {isJoining ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.joinButtonText}>🎾  Katıl</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </Animated.View>
       </View>
     </Modal>
@@ -756,18 +855,61 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: 20,
   },
   sheetTitle: { fontSize: 20, fontWeight: '700', color: '#0F172A', letterSpacing: -0.4 },
+  scrollContent: { paddingBottom: 8 },
 
-  // ── Status + skill ────────────────────────────────────────────────────────
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
-  statusPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  statusOpen: { backgroundColor: '#DCFCE7' },
-  statusFull: { backgroundColor: '#FEF3C7' },
-  statusText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
-  statusTextOpen: { color: '#15803D' },
-  statusTextFull: { color: '#92400E' },
+  // ── Skill + capacity ──────────────────────────────────────────────────────
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   skillPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, gap: 5 },
   skillDot:  { width: 6, height: 6, borderRadius: 3 },
   skillText: { fontSize: 12, fontWeight: '700' },
+
+  capacityCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    padding: CARD_PAD,
+    marginBottom: 18,
+    gap: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  capacityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  capacityTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    letterSpacing: -0.2,
+  },
+  capacityPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  capacityPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#F1F5F9',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
 
   // ── Final score card ──────────────────────────────────────────────────────
   finalScoreCard: {
@@ -798,7 +940,15 @@ const styles = StyleSheet.create({
   editScoreButtonText: { fontSize: 13, fontWeight: '600', color: '#92400E' },
 
   // ── Info card ─────────────────────────────────────────────────────────────
-  infoCard: { backgroundColor: '#F8FAFC', borderRadius: 14, padding: 14, gap: 10, marginBottom: 20 },
+  infoCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: CARD_PAD,
+    gap: 10,
+    marginBottom: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+  },
   infoRow:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
   infoText: { fontSize: 14, fontWeight: '500', color: '#374151', flex: 1 },
 
@@ -807,13 +957,27 @@ const styles = StyleSheet.create({
   // ── Section label ─────────────────────────────────────────────────────────
   sectionLabel: {
     fontSize: 12, fontWeight: '700', color: '#9CA3AF',
-    textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 14,
+    textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 16,
+  },
+
+  participantsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    padding: CARD_PAD,
+    marginBottom: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
 
   // ── Player list ───────────────────────────────────────────────────────────
-  playerList: { gap: 12, marginBottom: 4 },
-  playerRow:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  playerRowEmpty: { opacity: 0.45 },
+  playerList: { gap: 16 },
+  playerRow:  { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  playerRowEmpty: { opacity: 0.5 },
   playerAvatarWrapper: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   playerAvatar: {
     width: 40, height: 40, borderRadius: 20,
@@ -824,25 +988,27 @@ const styles = StyleSheet.create({
   playerAvatarWinner: { borderWidth: 2, borderColor: '#F59E0B' },
   playerAvatarEmpty:  { backgroundColor: '#F1F5F9', borderWidth: 1.5, borderColor: '#E2E8F0' },
   playerAvatarInitial: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  crownBadge: {
-    position: 'absolute', top: 0, right: 0, width: 17, height: 17, borderRadius: 9,
-    backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FDE68A',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  crownText:  { fontSize: 8, lineHeight: 10 },
   trophyBadge: {
     position: 'absolute', bottom: 0, right: 0, width: 18, height: 18, borderRadius: 9,
     backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A',
     alignItems: 'center', justifyContent: 'center',
   },
   trophyText: { fontSize: 9, lineHeight: 11 },
-  playerInfo: { flex: 1, gap: 2 },
-  playerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  playerRole: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  playerInfo: { flex: 1 },
+  playerNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
+  playerName: { fontSize: 16, fontWeight: '700', color: '#111827', letterSpacing: -0.2 },
+  hostBadge: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  hostBadgeText: { fontSize: 11, fontWeight: '700', color: '#15803D' },
   winnerTag:  { backgroundColor: '#FEF3C7', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   winnerTagText: { fontSize: 10, fontWeight: '700', color: '#78350F' },
-  playerUid:  { fontSize: 12, color: '#9CA3AF', fontWeight: '400' },
-  emptySlotText: { fontSize: 14, fontWeight: '500', color: '#9CA3AF' },
+  emptySlotText: { flex: 1, fontSize: 14, fontWeight: '500', color: '#9CA3AF' },
   kickBtn:    { padding: 4 },
 
   // ── Score section ─────────────────────────────────────────────────────────
@@ -935,4 +1101,32 @@ const styles = StyleSheet.create({
   leaveButtonText: { fontSize: 14, fontWeight: '700', color: '#F97316', letterSpacing: 0.2 },
   leaveButtonTextLocked: { color: '#9CA3AF' },
   leaveHint: { fontSize: 12, color: '#9CA3AF', textAlign: 'center', lineHeight: 18, marginBottom: 8 },
+
+  stickyFooter: {
+    marginHorizontal: -24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  joinButton: {
+    height: 52,
+    backgroundColor: '#22C55E',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#22C55E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.32,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  joinButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
 });
