@@ -9,7 +9,6 @@ import { FirebaseError } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ShieldCheck } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Animated, { Easing, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import {
   ActivityIndicator,
   Alert,
@@ -23,6 +22,7 @@ import {
   UIManager,
   View,
 } from 'react-native';
+import Animated, { Easing, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { WebView } from 'react-native-webview';

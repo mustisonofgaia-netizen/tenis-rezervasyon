@@ -14,11 +14,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useAuth } from '../context/AuthContext';
 import { useVerificationGuard } from '../hooks/useVerificationGuard';
 import { auth, db } from '../services/firebase';
 import { avatarColor } from '../services/userService';
+import type { RootTabParamList } from '../navigation/types';
 import type { UserStats } from '../types/user';
 import { DEFAULT_USER_STATS } from '../types/user';
 
@@ -83,7 +86,8 @@ function ProfileField({ label, value, placeholder }: ProfileFieldProps) {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export function ProfileScreen() {
-  const { uid } = useAuth();
+  const { uid, hasRole } = useAuth();
+  const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const { profile, requireVerification } = useVerificationGuard();
 
   const email = auth.currentUser?.email ?? '';
@@ -119,6 +123,24 @@ export function ProfileScreen() {
   const handleChangePassword = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     Alert.alert('Şifremi Değiştir', 'Yakında aktif edilecek.');
+  }, []);
+
+  const hasManagementRole =
+    hasRole('organizer') || hasRole('coach') || hasRole('court_manager');
+
+  const handleOrganizerPanel = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    navigation.navigate('Tournament', { screen: 'OrganizerDashboard' });
+  }, [navigation]);
+
+  const handleCoachPanel = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    Alert.alert('Antrenör Paneli', 'Özel ders modülü yakında aktif edilecek.');
+  }, []);
+
+  const handleCourtManagerPanel = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    Alert.alert('Tesis Yönetimi', 'Kort yönetim paneli yakında aktif edilecek.');
   }, []);
 
   const handleSignOut = useCallback(() => {
@@ -229,8 +251,74 @@ export function ProfileScreen() {
           </Animated.View>
         )}
 
+        {hasManagementRole && (
+          <Animated.View entering={FadeInDown.delay(240).duration(420).easing(Easing.out(Easing.cubic))}>
+            <Text style={styles.sectionLabel}>Yönetim Merkezi</Text>
+            <View style={styles.mgmtGroup}>
+
+              {hasRole('organizer') && (
+                <TouchableOpacity
+                  style={[styles.mgmtRow, styles.mgmtRowOrganizer]}
+                  activeOpacity={0.75}
+                  onPress={handleOrganizerPanel}
+                >
+                  <View style={styles.mgmtRowLeft}>
+                    <View style={[styles.mgmtIconWrapper, styles.mgmtIconOrganizer]}>
+                      <Ionicons name="trophy-outline" size={17} color="#D97706" />
+                    </View>
+                    <View>
+                      <Text style={styles.mgmtRowTitle}>Organizatör Paneli</Text>
+                      <Text style={styles.mgmtRowSub}>Turnuva Yönetimi</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#D97706" />
+                </TouchableOpacity>
+              )}
+
+              {hasRole('coach') && (
+                <TouchableOpacity
+                  style={[styles.mgmtRow, styles.mgmtRowCoach]}
+                  activeOpacity={0.75}
+                  onPress={handleCoachPanel}
+                >
+                  <View style={styles.mgmtRowLeft}>
+                    <View style={[styles.mgmtIconWrapper, styles.mgmtIconCoach]}>
+                      <Ionicons name="school-outline" size={17} color="#2563EB" />
+                    </View>
+                    <View>
+                      <Text style={styles.mgmtRowTitle}>Antrenör Paneli</Text>
+                      <Text style={styles.mgmtRowSub}>Özel Dersler</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#2563EB" />
+                </TouchableOpacity>
+              )}
+
+              {hasRole('court_manager') && (
+                <TouchableOpacity
+                  style={[styles.mgmtRow, styles.mgmtRowCourtManager]}
+                  activeOpacity={0.75}
+                  onPress={handleCourtManagerPanel}
+                >
+                  <View style={styles.mgmtRowLeft}>
+                    <View style={[styles.mgmtIconWrapper, styles.mgmtIconCourtManager]}>
+                      <Ionicons name="grid-outline" size={17} color="#059669" />
+                    </View>
+                    <View>
+                      <Text style={styles.mgmtRowTitle}>Tesis Yönetimi</Text>
+                      <Text style={styles.mgmtRowSub}>Kort & Fiyatlandırma</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#059669" />
+                </TouchableOpacity>
+              )}
+
+            </View>
+          </Animated.View>
+        )}
+
         <Animated.View
-          entering={FadeInDown.delay(260).duration(420).easing(Easing.out(Easing.cubic))}
+          entering={FadeInDown.delay(320).duration(420).easing(Easing.out(Easing.cubic))}
           style={styles.signOutSection}
         >
           <TouchableOpacity
@@ -444,6 +532,72 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#111827',
   },
+  // ── Management Hub ────────────────────────────────────────────────────────
+  mgmtGroup: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: CARD_RADIUS,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    marginBottom: 36,
+  },
+  mgmtRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderLeftWidth: 3,
+  },
+  mgmtRowOrganizer: {
+    borderLeftColor: '#F59E0B',
+    backgroundColor: '#FFFBEB',
+  },
+  mgmtRowCoach: {
+    borderLeftColor: '#3B82F6',
+    backgroundColor: '#EFF6FF',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E7EB',
+  },
+  mgmtRowCourtManager: {
+    borderLeftColor: '#10B981',
+    backgroundColor: '#F0FDF4',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E7EB',
+  },
+  mgmtRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  mgmtIconWrapper: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mgmtIconOrganizer:    { backgroundColor: '#FEF3C7' },
+  mgmtIconCoach:        { backgroundColor: '#DBEAFE' },
+  mgmtIconCourtManager: { backgroundColor: '#D1FAE5' },
+  mgmtRowTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.1,
+  },
+  mgmtRowSub: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6B7280',
+    marginTop: 1,
+  },
+
   signOutSection: { alignItems: 'center' },
   signOutButton: {
     flexDirection: 'row',

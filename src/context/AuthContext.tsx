@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { CompleteProfileModal } from '../components/CompleteProfileModal';
 import { db } from '../services/firebase';
-import type { AdminRole, UserVerificationProfile } from '../types/user';
+import type { AdminRole, UserRole, UserVerificationProfile } from '../types/user';
 import { DEFAULT_VERIFICATION_PROFILE, needsVerification } from '../types/user';
 
 // ─── Context shape ────────────────────────────────────────────────────────────
@@ -14,6 +14,13 @@ type AuthContextValue = {
   role: AdminRole;
   managedClubId: string;
   profile: UserVerificationProfile;
+  /** Live array of feature roles fetched from `users/{uid}.roles`. Defaults to `['player']`. */
+  roles: UserRole[];
+  /**
+   * Returns `true` if the current user holds the given feature role.
+   * Safe to call during render — reads from the live `roles` state.
+   */
+  hasRole: (role: UserRole) => boolean;
   /**
    * Runs `actionCallback` immediately if the user is verified.
    * Otherwise opens the global CompleteProfileModal and defers execution
@@ -37,23 +44,40 @@ export function AuthProvider({
   managedClubId: string;
   children: ReactNode;
 }) {
-  const [profile, setProfile] = useState<UserVerificationProfile>(DEFAULT_VERIFICATION_PROFILE);
+  const [profile,      setProfile]      = useState<UserVerificationProfile>(DEFAULT_VERIFICATION_PROFILE);
+  const [roles,        setRoles]        = useState<UserRole[]>(['player']);
   const [modalVisible, setModalVisible] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
 
-  // Live profile subscription — keeps verification state in sync
+  // Live profile subscription — keeps verification state and RBAC roles in sync
   useEffect(() => {
-    return onSnapshot(doc(db, 'users', uid), (snap) => {
-      const data = snap.data();
-      if (!data) return;
-      setProfile({
-        firstName:   (data.firstName   as string  | undefined) ?? '',
-        lastName:    (data.lastName    as string  | undefined) ?? '',
-        phoneNumber: (data.phoneNumber as string  | undefined) ?? '',
-        isVerified:  (data.isVerified  as boolean | undefined) ?? false,
-      });
-    });
+    return onSnapshot(
+      doc(db, 'users', uid),
+      (snap) => {
+        const data = snap.data();
+        if (!data) return;
+
+        setProfile({
+          firstName:   (data.firstName   as string  | undefined) ?? '',
+          lastName:    (data.lastName    as string  | undefined) ?? '',
+          phoneNumber: (data.phoneNumber as string  | undefined) ?? '',
+          isVerified:  (data.isVerified  as boolean | undefined) ?? false,
+        });
+
+        // Roles default to ['player'] when the field is absent so existing
+        // users are never accidentally locked out of their current access.
+        setRoles((data.roles as UserRole[] | undefined) ?? ['player']);
+      },
+      (error) => {
+        console.error('[AuthContext] user snapshot error:', error);
+      },
+    );
   }, [uid]);
+
+  const hasRole = useCallback(
+    (role: UserRole) => roles.includes(role),
+    [roles],
+  );
 
   const requireVerification = useCallback(
     (actionCallback: () => void) => {
@@ -81,7 +105,7 @@ export function AuthProvider({
   }, []);
 
   return (
-    <AuthContext.Provider value={{ uid, role, managedClubId, profile, requireVerification }}>
+    <AuthContext.Provider value={{ uid, role, managedClubId, profile, roles, hasRole, requireVerification }}>
       {children}
       <CompleteProfileModal
         isVisible={modalVisible}

@@ -22,9 +22,16 @@ import { ExploreScreen } from './src/screens/ExploreScreen';
 import { MatchesScreen } from './src/screens/MatchesScreen';
 import { MyBookingsScreen } from './src/screens/MyBookingsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
+import { TournamentScreen } from './src/screens/TournamentScreen';
+import { CreateTournamentScreen } from './src/screens/CreateTournamentScreen';
+import { OrganizerDashboardScreen } from './src/screens/OrganizerDashboardScreen';
 import { auth, db } from './src/services/firebase';
 import type { AdminRole } from './src/types/user';
-import type { ExploreStackParamList, RootTabParamList } from './src/navigation/types';
+import type {
+  ExploreStackParamList,
+  RootTabParamList,
+  TournamentStackParamList,
+} from './src/navigation/types';
 
 export type { RootTabParamList, ExploreStackParamList };
 
@@ -58,6 +65,7 @@ const TAB_ICON: Record<string, IoniconName> = {
   Booking:    'compass-outline',
   MyBookings: 'bookmark-outline',
   Matches:    'people-outline',
+  Tournament: 'trophy-outline',
   Profile:    'person-outline',
 };
 
@@ -65,6 +73,7 @@ const TAB_LABEL: Record<string, string> = {
   Booking:    'Keşfet',
   MyBookings: 'Etkinlik',
   Matches:    'Lobi',
+  Tournament: 'Turnuvalar',
   Profile:    'Profil',
 };
 
@@ -123,6 +132,20 @@ function ExploreNavigator() {
   );
 }
 
+// ─── Tournament stack (Hub → Organizer panel) ─────────────────────────────────
+
+const TournamentStack = createNativeStackNavigator<TournamentStackParamList>();
+
+function TournamentNavigator() {
+  return (
+    <TournamentStack.Navigator screenOptions={{ headerShown: false }}>
+      <TournamentStack.Screen name="TournamentHome"      component={TournamentScreen} />
+      <TournamentStack.Screen name="CreateTournament"    component={CreateTournamentScreen} />
+      <TournamentStack.Screen name="OrganizerDashboard"  component={OrganizerDashboardScreen} />
+    </TournamentStack.Navigator>
+  );
+}
+
 // ─── Root tab navigator ───────────────────────────────────────────────────────
 
 const PlayerTab = createBottomTabNavigator<RootTabParamList>();
@@ -137,6 +160,7 @@ function PlayerNavigator() {
       <PlayerTab.Screen name="Booking"    component={ExploreNavigator} />
       <PlayerTab.Screen name="MyBookings" component={MyBookingsScreen} />
       <PlayerTab.Screen name="Matches"    component={MatchesScreen} />
+      <PlayerTab.Screen name="Tournament" component={TournamentNavigator} />
       <PlayerTab.Screen name="Profile"    component={ProfileScreen} />
     </PlayerTab.Navigator>
   );

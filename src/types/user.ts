@@ -25,6 +25,17 @@ export const DEFAULT_USER_STATS: UserStats = {
  */
 export type AdminRole = 'player' | 'club_admin' | 'super_admin';
 
+/**
+ * Fine-grained feature roles stored in `users/{uid}.roles` (array).
+ * A user may hold multiple roles simultaneously.
+ *
+ * - `player`        — default; participates in matches and bookings
+ * - `organizer`     — creates and manages tournaments
+ * - `coach`         — offers private lessons via the Coaching module
+ * - `court_manager` — manages court availability and pricing
+ */
+export type UserRole = 'player' | 'organizer' | 'coach' | 'court_manager';
+
 /** Progressive onboarding / identity fields on `users/{uid}`. */
 export type UserVerificationProfile = {
   firstName: string;
@@ -50,6 +61,11 @@ export type UserProfile = UserVerificationProfile & {
    * Empty string for `super_admin` and `player`.
    */
   managedClubId: string;
+  /**
+   * Feature-level access flags. Defaults to `['player']` if absent.
+   * Multiple roles are supported (e.g. a user can be both a player and an organizer).
+   */
+  roles: UserRole[];
 };
 
 /** Returns true when the user must complete progressive verification. */
