@@ -12,13 +12,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { signOut } from 'firebase/auth';
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { useTheme } from '../context/ThemeContext';
 import { auth } from '../services/firebase';
 import { Screen, Card, Typography } from '../components/UI';
 import { fontWeights } from '../theme';
+import type { ColorTokens } from '../theme/tokens';
 
 // ─── Sub-component types ────────────────────────────────────────────────────
 
@@ -36,6 +37,33 @@ type SettingsRowProps = {
   chevron?:   boolean;
 };
 
+// ─── Theme-aware style factory ────────────────────────────────────────────────
+// Purely structural — colours are injected inline from theme tokens above.
+
+function makeStyles(_c: ColorTokens, _isDark: boolean) {
+  return StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      alignItems:    'center',
+    },
+    iconWrapper: {
+      width:          34,
+      height:         34,
+      borderRadius:   10,
+      alignItems:     'center',
+      justifyContent: 'center',
+    },
+    divider: {
+      height:           StyleSheet.hairlineWidth,
+      marginHorizontal: 0,
+    },
+    sectionCard: {
+      borderRadius: 14,
+      overflow:     'hidden',
+    },
+  });
+}
+
 // ─── SettingsRow ─────────────────────────────────────────────────────────────
 
 function SettingsRow({
@@ -46,10 +74,11 @@ function SettingsRow({
   danger   = false,
   chevron,
 }: SettingsRowProps) {
-  const { theme } = useTheme();
+  const { theme, colorScheme } = useTheme();
   const isDark = theme.colorScheme === 'dark';
   const sp     = theme.spacing;
   const c      = theme.colors;
+  const S      = useMemo(() => makeStyles(c, isDark), [theme, colorScheme]);
 
   const showChevron = chevron ?? !danger;
 
@@ -114,10 +143,12 @@ function SectionHeader({ children }: { children: string }) {
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export function SettingsScreen() {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, colorScheme, toggleTheme } = useTheme();
 
   const isDark = theme.colorScheme === 'dark';
   const sp     = theme.spacing;
+  const c      = theme.colors;
+  const S      = useMemo(() => makeStyles(c, isDark), [theme, colorScheme]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -257,26 +288,3 @@ export function SettingsScreen() {
   );
 }
 
-// ─── Static styles ────────────────────────────────────────────────────────────
-
-const S = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems:    'center',
-  },
-  iconWrapper: {
-    width:          34,
-    height:         34,
-    borderRadius:   10,
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
-  divider: {
-    height:           StyleSheet.hairlineWidth,
-    marginHorizontal: 0,
-  },
-  sectionCard: {
-    borderRadius: 14,
-    overflow:     'hidden',
-  },
-});

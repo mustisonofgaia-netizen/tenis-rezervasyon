@@ -17,19 +17,24 @@ export const palette = {
   slate900: '#0f172a',
   slate950: '#020617',
 
-  // ── Emerald (trustworthy professional green — primary accent) ─────────────
-  emerald400: '#34d399',
-  emerald500: '#10b981',
-  emerald600: '#059669',
-  emerald700: '#047857',
+  // ── Pine & Sage (Sage & Pine brand palette) ───────────────────────────────
+  // pine600 — deep, rich pine green for Light Mode accent
+  //   White text on pine600 → 5.0 : 1 contrast (WCAG AA ✓)
+  pine600: '#4f7942',
 
-  // ── Green ──────────────────────────────────────────────────────────────────
+  // sage400 — soft, muted sage green for Dark Mode accent
+  // sage500 — mid-tone used for secondary elements and subtle borders
+  //   slate900 text on sage400 → 6.9 : 1 contrast (WCAG AA ✓)
+  sage400: '#87a96b',
+  sage500: '#749359',
+
+  // ── Green (status / UI utilities) ─────────────────────────────────────────
   green400: '#4ade80',
   green500: '#22c55e',
   green600: '#16a34a',
   green700: '#15803d',
 
-  // ── Lime (legacy accent / light-theme secondary) ───────────────────────────
+  // ── Lime (legacy — kept for backward-compatibility) ───────────────────────
   lime300: '#bef264',
   lime400: '#a3e635',
   lime500: '#84cc16',

@@ -4,7 +4,8 @@
  * Responsibilities:
  *  • Reads the initial color scheme from the OS via `Appearance.getColorScheme()`.
  *  • Subscribes to live OS-level appearance changes (light ↔ dark toggle).
- *  • Allows manual override via `setColorScheme` (persists for the session).
+ *  • Allows manual override via `setColorScheme`; persists the choice to
+ *    AsyncStorage so it survives app restarts.
  *  • Exposes the fully-typed `Theme` object and the `useTheme()` hook.
  *
  * Usage:
@@ -20,6 +21,10 @@ import React, {
   useState,
 } from 'react';
 import { Appearance, type ColorSchemeName } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+/** AsyncStorage key for the persisted color-scheme preference. */
+const SCHEME_KEY = '@tenis_app:colorScheme';
 
 import { colorsByScheme, type ColorTokens } from '../theme/tokens';
 import { typography, type Typography } from '../theme/typography';
@@ -110,6 +115,24 @@ export function ThemeProvider({
     forcedColorScheme !== undefined,
   );
 
+  // ── Hydrate persisted preference on mount ─────────────────────────────────
+  // Skipped when forcedColorScheme is set (Storybook / automated test mode).
+  useEffect(() => {
+    if (forcedColorScheme !== undefined) return;
+
+    AsyncStorage.getItem(SCHEME_KEY)
+      .then((stored) => {
+        if (stored === 'light' || stored === 'dark') {
+          setColorSchemeState(stored);
+          setIsManualOverride(true);
+        }
+      })
+      .catch(() => {}); // silently degrade — OS preference remains active
+  // Intentionally empty deps: this is a one-shot mount hydration.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Subscribe to OS appearance changes ───────────────────────────────────
   useEffect(() => {
     if (isManualOverride) return;
 
@@ -127,6 +150,8 @@ export function ThemeProvider({
   const setColorScheme = useCallback((scheme: ColorScheme) => {
     setColorSchemeState(scheme);
     setIsManualOverride(true);
+    // Persist so the preference survives app restarts. Fire-and-forget.
+    AsyncStorage.setItem(SCHEME_KEY, scheme).catch(() => {});
   }, []);
 
   const toggleTheme = useCallback(() => {

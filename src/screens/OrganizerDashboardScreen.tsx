@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,6 +15,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import type { ColorTokens } from '../theme/tokens';
 import type {
   Tournament,
   TournamentMatch,
@@ -30,15 +32,279 @@ import {
   subscribeToTournamentApprovals,
 } from '../services/tournamentService';
 
-// ─── Theme ────────────────────────────────────────────────────────────────────
+// ─── Theme-aware style factory ────────────────────────────────────────────────
 
-const BG     = '#0f172a';
-const CARD   = '#1e293b';
-const ACCENT = '#bef264';
-const BORDER = '#334155';
-const TEXT   = '#f1f5f9';
-const MUTED  = '#94a3b8';
-const DANGER = '#ef4444';
+function makeStyles(c: ColorTokens) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: c.background.secondary,
+    },
+
+    // ── Header ────────────────────────────────────────────────────────────────
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingBottom: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border.default,
+    },
+    backBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: c.surface.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerCenter: {
+      flex: 1,
+      alignItems: 'center',
+      paddingHorizontal: 8,
+    },
+    headerTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: c.text.primary,
+      letterSpacing: -0.2,
+    },
+    headerSub: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: c.text.muted,
+      marginTop: 1,
+    },
+
+    // ── Centre splash (loading / empty) ────────────────────────────────────────
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 32,
+      gap: 14,
+    },
+    loadingText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: c.text.muted,
+    },
+    emptyTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: c.text.primary,
+      letterSpacing: -0.2,
+    },
+    emptyHint: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: c.text.muted,
+      textAlign: 'center',
+      lineHeight: 19,
+    },
+
+    // ── Tournament selector ───────────────────────────────────────────────────
+    selectorRow: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      gap: 8,
+    },
+    selectorPill: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: c.border.default,
+      backgroundColor: c.surface.card,
+      maxWidth: 180,
+    },
+    selectorPillActive: {
+      backgroundColor: c.accent.primary,
+      borderColor:     c.accent.primary,
+    },
+    selectorText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: c.text.muted,
+    },
+    selectorTextActive: {
+      color: c.text.inverse,
+    },
+
+    // ── Tab bar ───────────────────────────────────────────────────────────────
+    tabBar: {
+      flexDirection: 'row',
+      marginHorizontal: 16,
+      marginBottom: 12,
+      backgroundColor: c.surface.card,
+      borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border.default,
+      overflow: 'hidden',
+    },
+    tabBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 11,
+      gap: 4,
+    },
+    tabBtnActive: {
+      backgroundColor: c.accent.primary,
+    },
+    tabText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: c.text.muted,
+    },
+    tabTextActive: {
+      color: c.text.inverse,
+    },
+    badge: {
+      backgroundColor: c.status.danger,
+      borderRadius: 8,
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      marginLeft: 4,
+      minWidth: 18,
+      alignItems: 'center',
+    },
+    // badge text is always white since it sits on the danger (red) background
+    badgeText: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: '#ffffff',
+    },
+
+    // ── FlatList container ────────────────────────────────────────────────────
+    list: {
+      paddingHorizontal: 16,
+      gap: 10,
+    },
+    listEmpty: {
+      alignItems: 'center',
+      paddingTop: 60,
+      gap: 12,
+    },
+    listEmptyText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: c.text.muted,
+    },
+
+    // ── Item card ─────────────────────────────────────────────────────────────
+    card: {
+      backgroundColor: c.surface.card,
+      borderRadius: 16,
+      padding: 16,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border.default,
+      gap: 12,
+    },
+    cardTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    playerAvatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      // accent tint background for the player avatar icon
+      backgroundColor: c.accent.primary + '1A',
+      borderWidth: 1,
+      borderColor: c.accent.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cardTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: c.text.primary,
+      letterSpacing: -0.1,
+    },
+    cardSub: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: c.text.muted,
+      marginTop: 2,
+    },
+
+    // ── Match card specifics ──────────────────────────────────────────────────
+    matchHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    matchPlayer: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.text.primary,
+      textAlign: 'center',
+    },
+    vsChip: {
+      backgroundColor: c.border.default,
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    vsText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: c.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    matchMeta: {
+      gap: 4,
+    },
+    matchScoreRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    matchScore: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: c.accent.primary,
+      letterSpacing: 0.3,
+    },
+
+    // ── Action pair ───────────────────────────────────────────────────────────
+    actionRow: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    actionBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      borderRadius: 10,
+    },
+    approveBtn: {
+      backgroundColor: c.accent.primary,
+    },
+    approveBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.text.inverse,
+    },
+    rejectBtn: {
+      backgroundColor: c.status.danger + '1F',
+      borderWidth: 1,
+      borderColor: c.status.danger + '4D',
+    },
+    rejectBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.status.danger,
+    },
+  });
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -67,25 +333,33 @@ type ActionPairProps = {
 };
 
 function ActionPair({ onApprove, onReject, approveLabel, rejectLabel }: ActionPairProps) {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  const S = useMemo(() => makeStyles(c), [theme]);
+
   return (
-    <View style={d.actionRow}>
-      <TouchableOpacity style={[d.actionBtn, d.approveBtn]} onPress={onApprove} activeOpacity={0.8}>
-        <Ionicons name="checkmark" size={14} color={BG} style={{ marginRight: 4 }} />
-        <Text style={d.approveBtnText}>{approveLabel}</Text>
+    <View style={S.actionRow}>
+      <TouchableOpacity style={[S.actionBtn, S.approveBtn]} onPress={onApprove} activeOpacity={0.8}>
+        <Ionicons name="checkmark" size={14} color={c.text.inverse} style={{ marginRight: 4 }} />
+        <Text style={S.approveBtnText}>{approveLabel}</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[d.actionBtn, d.rejectBtn]} onPress={onReject} activeOpacity={0.8}>
-        <Ionicons name="close" size={14} color={DANGER} style={{ marginRight: 4 }} />
-        <Text style={d.rejectBtnText}>{rejectLabel}</Text>
+      <TouchableOpacity style={[S.actionBtn, S.rejectBtn]} onPress={onReject} activeOpacity={0.8}>
+        <Ionicons name="close" size={14} color={c.status.danger} style={{ marginRight: 4 }} />
+        <Text style={S.rejectBtnText}>{rejectLabel}</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 function EmptyState({ message }: { message: string }) {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  const S = useMemo(() => makeStyles(c), [theme]);
+
   return (
-    <View style={d.listEmpty}>
-      <Ionicons name="checkmark-done-outline" size={36} color={BORDER} />
-      <Text style={d.listEmptyText}>{message}</Text>
+    <View style={S.listEmpty}>
+      <Ionicons name="checkmark-done-outline" size={36} color={c.border.default} />
+      <Text style={S.listEmptyText}>{message}</Text>
     </View>
   );
 }
@@ -96,6 +370,9 @@ export function OrganizerDashboardScreen() {
   const insets     = useSafeAreaInsets();
   const navigation = useNavigation();
   const { uid }    = useAuth();
+  const { theme }  = useTheme();
+  const c          = theme.colors;
+  const S          = useMemo(() => makeStyles(c), [theme]);
 
   // ── Data state ──────────────────────────────────────────────────────────────
   const [myTournaments,        setMyTournaments]        = useState<Tournament[]>([]);
@@ -237,43 +514,43 @@ export function OrganizerDashboardScreen() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <View style={[d.root, { paddingTop: insets.top }]}>
+    <View style={[S.root, { paddingTop: insets.top }]}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <View style={d.header}>
+      <View style={S.header}>
         <TouchableOpacity
-          style={d.backBtn}
+          style={S.backBtn}
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="chevron-back" size={22} color={TEXT} />
+          <Ionicons name="chevron-back" size={22} color={c.text.primary} />
         </TouchableOpacity>
 
-        <View style={d.headerCenter}>
-          <Text style={d.headerTitle}>Organizatör Paneli</Text>
-          <Text style={d.headerSub} numberOfLines={1}>
+        <View style={S.headerCenter}>
+          <Text style={S.headerTitle}>Organizatör Paneli</Text>
+          <Text style={S.headerSub} numberOfLines={1}>
             {selectedTournament ? selectedTournament.title : 'Turnuvalarınız'}
           </Text>
         </View>
 
         {/* Balance spacer */}
-        <View style={d.backBtn} />
+        <View style={S.backBtn} />
       </View>
 
       {/* ── Loading splash ──────────────────────────────────────────────────── */}
       {isLoading ? (
-        <View style={d.center}>
-          <ActivityIndicator color={ACCENT} size="large" />
-          <Text style={d.loadingText}>Turnuvalar yükleniyor…</Text>
+        <View style={S.center}>
+          <ActivityIndicator color={c.accent.primary} size="large" />
+          <Text style={S.loadingText}>Turnuvalar yükleniyor…</Text>
         </View>
 
       ) : myTournaments.length === 0 ? (
         /* ── Empty state ─────────────────────────────────────────────────── */
-        <View style={d.center}>
-          <Ionicons name="trophy-outline" size={52} color={BORDER} />
-          <Text style={d.emptyTitle}>Henüz Turnuvanız Yok</Text>
-          <Text style={d.emptyHint}>
+        <View style={S.center}>
+          <Ionicons name="trophy-outline" size={52} color={c.border.default} />
+          <Text style={S.emptyTitle}>Henüz Turnuvanız Yok</Text>
+          <Text style={S.emptyHint}>
             Turnuvalar ekranındaki + butonundan yeni bir turnuva oluşturun.
           </Text>
         </View>
@@ -285,18 +562,18 @@ export function OrganizerDashboardScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={d.selectorRow}
+              contentContainerStyle={S.selectorRow}
             >
               {myTournaments.map((t) => {
                 const active = t.id === selectedTournamentId;
                 return (
                   <TouchableOpacity
                     key={t.id}
-                    style={[d.selectorPill, active && d.selectorPillActive]}
+                    style={[S.selectorPill, active && S.selectorPillActive]}
                     onPress={() => setSelectedTournamentId(t.id)}
                     activeOpacity={0.75}
                   >
-                    <Text style={[d.selectorText, active && d.selectorTextActive]}
+                    <Text style={[S.selectorText, active && S.selectorTextActive]}
                       numberOfLines={1}
                     >
                       {t.title}
@@ -308,45 +585,45 @@ export function OrganizerDashboardScreen() {
           )}
 
           {/* ── Tab bar ──────────────────────────────────────────────────── */}
-          <View style={d.tabBar}>
+          <View style={S.tabBar}>
             <TouchableOpacity
-              style={[d.tabBtn, activeTab === 'players' && d.tabBtnActive]}
+              style={[S.tabBtn, activeTab === 'players' && S.tabBtnActive]}
               onPress={() => setActiveTab('players')}
               activeOpacity={0.8}
             >
               <Ionicons
                 name="person-add-outline"
                 size={14}
-                color={activeTab === 'players' ? BG : MUTED}
+                color={activeTab === 'players' ? c.text.inverse : c.text.muted}
                 style={{ marginRight: 5 }}
               />
-              <Text style={[d.tabText, activeTab === 'players' && d.tabTextActive]}>
+              <Text style={[S.tabText, activeTab === 'players' && S.tabTextActive]}>
                 Başvurular
               </Text>
               {pendingPlayers.length > 0 && (
-                <View style={d.badge}>
-                  <Text style={d.badgeText}>{pendingPlayers.length}</Text>
+                <View style={S.badge}>
+                  <Text style={S.badgeText}>{pendingPlayers.length}</Text>
                 </View>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[d.tabBtn, activeTab === 'matches' && d.tabBtnActive]}
+              style={[S.tabBtn, activeTab === 'matches' && S.tabBtnActive]}
               onPress={() => setActiveTab('matches')}
               activeOpacity={0.8}
             >
               <Ionicons
                 name="checkmark-circle-outline"
                 size={14}
-                color={activeTab === 'matches' ? BG : MUTED}
+                color={activeTab === 'matches' ? c.text.inverse : c.text.muted}
                 style={{ marginRight: 5 }}
               />
-              <Text style={[d.tabText, activeTab === 'matches' && d.tabTextActive]}>
+              <Text style={[S.tabText, activeTab === 'matches' && S.tabTextActive]}>
                 Maç Onayları
               </Text>
               {pendingMatches.length > 0 && (
-                <View style={d.badge}>
-                  <Text style={d.badgeText}>{pendingMatches.length}</Text>
+                <View style={S.badge}>
+                  <Text style={S.badgeText}>{pendingMatches.length}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -357,18 +634,18 @@ export function OrganizerDashboardScreen() {
             <FlatList
               data={pendingPlayers}
               keyExtractor={(item) => item.userId}
-              contentContainerStyle={[d.list, { paddingBottom: insets.bottom + 24 }]}
+              contentContainerStyle={[S.list, { paddingBottom: insets.bottom + 24 }]}
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={<EmptyState message="Bekleyen başvuru yok" />}
               renderItem={({ item }) => (
-                <View style={d.card}>
-                  <View style={d.cardTop}>
-                    <View style={d.playerAvatar}>
-                      <Ionicons name="person-outline" size={17} color={ACCENT} />
+                <View style={S.card}>
+                  <View style={S.cardTop}>
+                    <View style={S.playerAvatar}>
+                      <Ionicons name="person-outline" size={17} color={c.accent.primary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={d.cardTitle}>{truncateId(item.userId)}</Text>
-                      <Text style={d.cardSub}>Başvuru tarihi: {formatDate(item.joinedAt)}</Text>
+                      <Text style={S.cardTitle}>{truncateId(item.userId)}</Text>
+                      <Text style={S.cardSub}>Başvuru tarihi: {formatDate(item.joinedAt)}</Text>
                     </View>
                   </View>
                   <ActionPair
@@ -387,31 +664,31 @@ export function OrganizerDashboardScreen() {
             <FlatList
               data={pendingMatches}
               keyExtractor={(item) => item.id}
-              contentContainerStyle={[d.list, { paddingBottom: insets.bottom + 24 }]}
+              contentContainerStyle={[S.list, { paddingBottom: insets.bottom + 24 }]}
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={<EmptyState message="Bekleyen maç onayı yok" />}
               renderItem={({ item }) => (
-                <View style={d.card}>
+                <View style={S.card}>
                   {/* Players vs header */}
-                  <View style={d.matchHeader}>
-                    <Text style={d.matchPlayer} numberOfLines={1}>
+                  <View style={S.matchHeader}>
+                    <Text style={S.matchPlayer} numberOfLines={1}>
                       {truncateId(item.player1Id, 14)}
                     </Text>
-                    <View style={d.vsChip}>
-                      <Text style={d.vsText}>vs</Text>
+                    <View style={S.vsChip}>
+                      <Text style={S.vsText}>vs</Text>
                     </View>
-                    <Text style={d.matchPlayer} numberOfLines={1}>
+                    <Text style={S.matchPlayer} numberOfLines={1}>
                       {truncateId(item.player2Id, 14)}
                     </Text>
                   </View>
 
                   {/* Score & submitter */}
-                  <View style={d.matchMeta}>
-                    <View style={d.matchScoreRow}>
-                      <Ionicons name="tennisball-outline" size={13} color={ACCENT} style={{ marginRight: 5 }} />
-                      <Text style={d.matchScore}>{item.score}</Text>
+                  <View style={S.matchMeta}>
+                    <View style={S.matchScoreRow}>
+                      <Ionicons name="tennisball-outline" size={13} color={c.accent.primary} style={{ marginRight: 5 }} />
+                      <Text style={S.matchScore}>{item.score}</Text>
                     </View>
-                    <Text style={d.cardSub}>
+                    <Text style={S.cardSub}>
                       Gönderen: {truncateId(item.submittedBy, 16)}
                     </Text>
                   </View>
@@ -431,273 +708,3 @@ export function OrganizerDashboardScreen() {
     </View>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const d = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: BG,
-  },
-
-  // ── Header ────────────────────────────────────────────────────────────────
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: BORDER,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: CARD,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: TEXT,
-    letterSpacing: -0.2,
-  },
-  headerSub: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: MUTED,
-    marginTop: 1,
-  },
-
-  // ── Centre splash (loading / empty) ───────────────────────────────────────
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    gap: 14,
-  },
-  loadingText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: MUTED,
-  },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: TEXT,
-    letterSpacing: -0.2,
-  },
-  emptyHint: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: MUTED,
-    textAlign: 'center',
-    lineHeight: 19,
-  },
-
-  // ── Tournament selector ───────────────────────────────────────────────────
-  selectorRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  selectorPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: CARD,
-    maxWidth: 180,
-  },
-  selectorPillActive: {
-    backgroundColor: ACCENT,
-    borderColor:     ACCENT,
-  },
-  selectorText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: MUTED,
-  },
-  selectorTextActive: {
-    color: BG,
-  },
-
-  // ── Tab bar ───────────────────────────────────────────────────────────────
-  tabBar: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    backgroundColor: CARD,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: BORDER,
-    overflow: 'hidden',
-  },
-  tabBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 11,
-    gap: 4,
-  },
-  tabBtnActive: {
-    backgroundColor: ACCENT,
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: MUTED,
-  },
-  tabTextActive: {
-    color: BG,
-  },
-  badge: {
-    backgroundColor: DANGER,
-    borderRadius: 8,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    marginLeft: 4,
-    minWidth: 18,
-    alignItems: 'center',
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#fff',
-  },
-
-  // ── FlatList container ────────────────────────────────────────────────────
-  list: {
-    paddingHorizontal: 16,
-    gap: 10,
-  },
-  listEmpty: {
-    alignItems: 'center',
-    paddingTop: 60,
-    gap: 12,
-  },
-  listEmptyText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: MUTED,
-  },
-
-  // ── Item card ─────────────────────────────────────────────────────────────
-  card: {
-    backgroundColor: CARD,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: BORDER,
-    gap: 12,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  playerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#1a2e1a',
-    borderWidth: 1,
-    borderColor: ACCENT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: TEXT,
-    letterSpacing: -0.1,
-  },
-  cardSub: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: MUTED,
-    marginTop: 2,
-  },
-
-  // ── Match card specifics ──────────────────────────────────────────────────
-  matchHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  matchPlayer: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '700',
-    color: TEXT,
-    textAlign: 'center',
-  },
-  vsChip: {
-    backgroundColor: BORDER,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  vsText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: MUTED,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  matchMeta: {
-    gap: 4,
-  },
-  matchScoreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  matchScore: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: ACCENT,
-    letterSpacing: 0.3,
-  },
-
-  // ── Action pair ───────────────────────────────────────────────────────────
-  actionRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  approveBtn: {
-    backgroundColor: ACCENT,
-  },
-  approveBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: BG,
-  },
-  rejectBtn: {
-    backgroundColor: 'rgba(239,68,68,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.30)',
-  },
-  rejectBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: DANGER,
-  },
-});

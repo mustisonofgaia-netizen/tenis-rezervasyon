@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { User } from 'lucide-react-native';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,6 +33,7 @@ import type { UserStats } from '../types/user';
 import { DEFAULT_USER_STATS } from '../types/user';
 import { Screen, Card, Typography } from '../components/UI';
 import { fontWeights } from '../theme';
+import type { ColorTokens } from '../theme/tokens';
 
 // ─── Mock / scaffold data ──────────────────────────────────────────────────────
 // Used as fallback display values until real Firestore data is available.
@@ -56,8 +57,8 @@ const MOCK_ACHIEVEMENTS = ['🔥 5 Win Streak', '🏆 First Tournament', '⚡ Fa
 
 // ─── Layout constants ──────────────────────────────────────────────────────────
 
-const COVER_HEIGHT  = 120;
-const AVATAR_SIZE   = 88;
+const COVER_HEIGHT  = 70;
+const AVATAR_SIZE   = 100;
 const AVATAR_BORDER = 4; // white ring separating avatar from cover
 
 // ─── Rank helpers ──────────────────────────────────────────────────────────────
@@ -105,6 +106,129 @@ const ROLE_ACCENTS: Readonly<Record<'coach' | 'courtManager', RoleAccent>> = {
   },
 };
 
+// ─── Theme-aware style factory ────────────────────────────────────────────────
+// Purely structural — no hardcoded colours. All colours are injected via inline
+// styles from the theme above; this factory exists solely to keep all
+// StyleSheet.create calls inside the component lifecycle per architecture rules.
+
+function makeStyles(_c: ColorTokens, _isDark: boolean) {
+  return StyleSheet.create({
+
+    scrollSection: {
+      flex: 1,
+    },
+
+    coverBanner: {
+      overflow: 'hidden',
+    },
+    settingsBtn: {
+      position: 'absolute',
+      zIndex:   10,
+    },
+    settingsIconBg: {
+      width:          40,
+      height:         40,
+      borderRadius:   12,
+      alignItems:     'center',
+      justifyContent: 'center',
+    },
+
+    avatarCircle: {
+      width:          AVATAR_SIZE,
+      height:         AVATAR_SIZE,
+      borderRadius:   AVATAR_SIZE / 2,
+      alignItems:     'center',
+      justifyContent: 'center',
+    },
+
+    rankPill: {
+      flexDirection: 'row',
+      alignItems:    'center',
+      borderRadius:  20,
+      borderWidth:   1,
+    },
+
+    ctaButton: {
+      flexDirection:  'row',
+      alignItems:     'center',
+      justifyContent: 'center',
+      borderRadius:   14,
+    },
+
+    statRow: {
+      flexDirection: 'row',
+      overflow:      'hidden',
+    },
+    statCell: {
+      flex:           1,
+      alignItems:     'center',
+      justifyContent: 'center',
+    },
+    statCellDividers: {
+      borderLeftWidth:  StyleSheet.hairlineWidth,
+      borderRightWidth: StyleSheet.hairlineWidth,
+    },
+    statLabel: {
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      fontWeight:    fontWeights.semibold,
+      marginTop:     2,
+    },
+
+    matchRow: {
+      flexDirection:  'row',
+      justifyContent: 'space-between',
+      alignItems:     'center',
+    },
+    resultBadge: {
+      paddingHorizontal: 10,
+      paddingVertical:   4,
+      borderRadius:      8,
+      alignItems:        'center',
+      justifyContent:    'center',
+    },
+
+    sectionLabel: {
+      textTransform: 'uppercase',
+      letterSpacing: 0.9,
+      fontWeight:    fontWeights.bold,
+    },
+    mgmtRow: {
+      flexDirection:   'row',
+      alignItems:      'center',
+      justifyContent:  'space-between',
+      borderLeftWidth: 3,
+    },
+    mgmtTitle: {
+      fontWeight:    fontWeights.bold,
+      letterSpacing: -0.1,
+    },
+    rowLeft: {
+      flexDirection: 'row',
+      alignItems:    'center',
+    },
+    iconWrapper34: {
+      width:          34,
+      height:         34,
+      borderRadius:   10,
+      alignItems:     'center',
+      justifyContent: 'center',
+    },
+
+    ctaBannerRow: {
+      flexDirection: 'row',
+      alignItems:    'center',
+    },
+    ctaIconCircle: {
+      width:          52,
+      height:         52,
+      borderRadius:   26,
+      alignItems:     'center',
+      justifyContent: 'center',
+    },
+  });
+}
+
 // ─── Screen ────────────────────────────────────────────────────────────────────
 
 export function ProfileScreen() {
@@ -114,9 +238,11 @@ export function ProfileScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
 
-  const isDark = theme.colorScheme === 'dark';
+  const isDark     = theme.colorScheme === 'dark';
+  const colorScheme = theme.colorScheme;
   const sp     = theme.spacing;
   const c      = theme.colors;
+  const S      = useMemo(() => makeStyles(c, isDark), [theme, colorScheme]);
 
   const displayName = formatDisplayName(profile.firstName, profile.lastName);
   const initials    = buildInitials(profile.firstName, profile.lastName);
@@ -190,7 +316,7 @@ export function ProfileScreen() {
   return (
     <Screen
       edges={['bottom', 'left', 'right']}
-      style={{ backgroundColor: c.background.primary }}
+      style={{ backgroundColor: c.background.secondary }}
     >
 
       {/* ══ FIXED TOP SECTION ══════════════════════════════════════════════════
@@ -205,7 +331,7 @@ export function ProfileScreen() {
         <View
           style={[
             S.coverBanner,
-            { backgroundColor: bannerBg, height: COVER_HEIGHT + insets.top },
+            { backgroundColor: c.background.secondary, height: COVER_HEIGHT + insets.top },
           ]}
         >
           {/* Settings gear — lives in a plain View, no animation wrapper, fully tappable */}
@@ -635,133 +761,3 @@ export function ProfileScreen() {
   );
 }
 
-// ─── Static layout styles ──────────────────────────────────────────────────────
-// No colors, no spacing values — purely structural (flex, sizing, border-radius).
-// All color and spacing values are injected inline from the theme above.
-
-const S = StyleSheet.create({
-
-  // ── Scrollable bottom section ────────────────────────────────────────────────
-  scrollSection: {
-    flex: 1,
-  },
-
-  // ── Cover banner ────────────────────────────────────────────────────────────
-  // Height is set inline (COVER_HEIGHT + insets.top) to absorb the status bar.
-  coverBanner: {
-    overflow: 'hidden',
-  },
-  settingsBtn: {
-    position: 'absolute',
-    zIndex:   10,
-  },
-  settingsIconBg: {
-    width:          40,
-    height:         40,
-    borderRadius:   12,
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
-
-  // ── Avatar ───────────────────────────────────────────────────────────────────
-  avatarCircle: {
-    width:          AVATAR_SIZE,
-    height:         AVATAR_SIZE,
-    borderRadius:   AVATAR_SIZE / 2,
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
-
-  // ── Rank pill ────────────────────────────────────────────────────────────────
-  rankPill: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    borderRadius:  20,
-    borderWidth:   1,
-  },
-
-  // ── Complete-profile CTA button ──────────────────────────────────────────────
-  ctaButton: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'center',
-    borderRadius:   14,
-  },
-
-  // ── Stats board ──────────────────────────────────────────────────────────────
-  statRow: {
-    flexDirection: 'row',
-    overflow:      'hidden',
-  },
-  statCell: {
-    flex:           1,
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
-  statCellDividers: {
-    borderLeftWidth:  StyleSheet.hairlineWidth,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    // borderColor injected inline from theme.colors.border.default
-  },
-  statLabel: {
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    fontWeight:    fontWeights.semibold,
-    marginTop:     2,
-  },
-
-  // ── Match card ───────────────────────────────────────────────────────────────
-  matchRow: {
-    flexDirection:  'row',
-    justifyContent: 'space-between',
-    alignItems:     'center',
-  },
-  resultBadge: {
-    paddingHorizontal: 10,
-    paddingVertical:   4,
-    borderRadius:      8,
-    alignItems:        'center',
-    justifyContent:    'center',
-  },
-
-  // ── Management hub ───────────────────────────────────────────────────────────
-  sectionLabel: {
-    textTransform: 'uppercase',
-    letterSpacing: 0.9,
-    fontWeight:    fontWeights.bold,
-  },
-  mgmtRow: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'space-between',
-    borderLeftWidth: 3,
-  },
-  mgmtTitle: {
-    fontWeight:    fontWeights.bold,
-    letterSpacing: -0.1,
-  },
-  rowLeft: {
-    flexDirection: 'row',
-    alignItems:    'center',
-  },
-  iconWrapper34: {
-    width:          34,
-    height:         34,
-    borderRadius:   10,
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
-
-  // ── Organizer CTA banner ─────────────────────────────────────────────────────
-  ctaBannerRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-  },
-  ctaIconCircle: {
-    width:          52,
-    height:         52,
-    borderRadius:   26,
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
-});

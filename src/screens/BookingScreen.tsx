@@ -34,6 +34,7 @@ import { TimeSlotGrid } from '../components/TimeSlotGrid';
 import { IS_MOCK_MODE } from '../config/app';
 import { getClubById, getCourtById, getCourtsByClubId } from '../config/data';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { useVerificationGuard } from '../hooks/useVerificationGuard';
 import type { ExploreStackParamList, RootTabParamList } from '../navigation/types';
 import {
@@ -45,6 +46,7 @@ import { app } from '../services/firebase';
 import { LOCK_DURATION_MS } from '../types/booking';
 import type { CourtId, SlotInfo } from '../types/booking';
 import type { CreatePaymentSessionResponse } from '../types/payment';
+import type { ColorTokens } from '../theme/tokens';
 import { MockPaymentScreen } from './MockPaymentScreen';
 
 type BookingNavProp = CompositeNavigationProp<
@@ -65,9 +67,9 @@ type PaymentSession = {
   courtId: CourtId;
 };
 
-const CUBIC_OUT   = Easing.out(Easing.cubic);
-const H_PAD       = 20;
-const SECTION_GAP = 24;
+const CUBIC_OUT          = Easing.out(Easing.cubic);
+const H_PAD              = 20;
+const SECTION_GAP        = 24;
 const TAB_BAR_BOTTOM     = 0;
 const TAB_BAR_HEIGHT     = 68;
 const FOOTER_SAFE_PAD    = 10;
@@ -86,19 +88,409 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// ─── Theme-aware style factory ────────────────────────────────────────────────
+
+function makeStyles(c: ColorTokens, _isDark: boolean) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background.secondary,
+    },
+
+    scrollView: { flex: 1 },
+    scrollContent: {
+      flexGrow: 1,
+      paddingBottom: TAB_BAR_BOTTOM + TAB_BAR_HEIGHT + FOOTER_SAFE_PAD + 80,
+    },
+
+    // ── Hero ───────────────────────────────────────────────────────────────────
+    hero: {
+      height: 280,
+      position: 'relative',
+      backgroundColor: c.background.primary,
+    },
+    heroImage: {
+      ...StyleSheet.absoluteFillObject,
+      width: '100%',
+      height: '100%',
+    },
+    backButton: {
+      position: 'absolute',
+      left: H_PAD,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: 'rgba(255, 255, 255, 0.92)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      elevation: 4,
+      zIndex: 2,
+    },
+    heroContent: {
+      position: 'absolute',
+      left: H_PAD,
+      right: H_PAD,
+      bottom: 22,
+      zIndex: 2,
+      gap: 6,
+    },
+    heroClubName: {
+      fontSize: 28,
+      fontWeight: '800',
+      color: '#FFFFFF',
+      letterSpacing: -0.6,
+      lineHeight: 34,
+    },
+    heroAddressRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    heroAddress: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '500',
+      color: 'rgba(255, 255, 255, 0.88)',
+    },
+
+    // ── Body ───────────────────────────────────────────────────────────────────
+    body: {
+      paddingHorizontal: H_PAD,
+      paddingTop: SECTION_GAP,
+      gap: SECTION_GAP,
+    },
+
+    bookingToast: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      backgroundColor: c.status.success + '14',
+      borderWidth: 1,
+      borderColor: c.status.success + '33',
+    },
+    bookingToastText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: c.status.success,
+    },
+
+    mockBanner: {
+      backgroundColor: c.status.warning + '26',
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+    },
+    mockBannerText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.status.warning,
+      textAlign: 'center',
+    },
+
+    // ── Price ──────────────────────────────────────────────────────────────────
+    priceCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: c.surface.card,
+      borderRadius: 16,
+      padding: 18,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border.default,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.04,
+      shadowRadius: 8,
+      elevation: 1,
+    },
+    priceMeta: { flex: 1, marginRight: 12, gap: 4 },
+    priceLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    priceCourtName: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: c.text.primary,
+      letterSpacing: -0.2,
+    },
+    priceAmountWrap: { alignItems: 'flex-end' },
+    priceAmount: {
+      fontSize: 26,
+      fontWeight: '800',
+      color: c.text.primary,
+      letterSpacing: -0.5,
+    },
+    priceUnit: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: c.text.muted,
+      marginTop: 2,
+    },
+
+    // ── Trust banner ───────────────────────────────────────────────────────────
+    trustBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: c.status.success + '14',
+      borderRadius: 14,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: c.status.success + '33',
+    },
+    trustBannerText: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: '500',
+      color: c.status.success,
+      lineHeight: 19,
+    },
+
+    // ── Booking sections ───────────────────────────────────────────────────────
+    bookingSection: { gap: 14 },
+    bookingSectionLabel: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: c.text.primary,
+      letterSpacing: -0.3,
+    },
+    courtPickerWrapper: {
+      marginHorizontal: -H_PAD,
+    },
+
+    emptySlotHint: {
+      alignItems: 'center',
+      paddingVertical: 36,
+      gap: 10,
+    },
+    emptySlotIcon: { fontSize: 36 },
+    emptySlotText: {
+      fontSize: 15,
+      color: c.text.muted,
+      textAlign: 'center',
+      lineHeight: 22,
+    },
+
+    // ── Content sections ───────────────────────────────────────────────────────
+    contentSection: { gap: 14 },
+    sectionTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.9,
+    },
+
+    policyCard: {
+      backgroundColor: c.surface.card,
+      borderRadius: 16,
+      padding: 18,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border.default,
+    },
+    policyText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: c.text.primary,
+      lineHeight: 22,
+    },
+
+    amenitiesGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+    },
+    amenityCard: {
+      width: '48%',
+      flexGrow: 1,
+      flexBasis: '46%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: c.surface.card,
+      borderRadius: 14,
+      paddingVertical: 14,
+      paddingHorizontal: 12,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border.default,
+    },
+    amenityIcon: { fontSize: 22 },
+    amenityTextWrap: { flex: 1, gap: 1 },
+    amenityTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.text.primary,
+    },
+    amenitySubtitle: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: c.text.muted,
+    },
+
+    aboutCard: {
+      backgroundColor: c.surface.card,
+      borderRadius: 16,
+      padding: 18,
+      gap: 14,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border.default,
+    },
+    aboutText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: c.text.primary,
+      lineHeight: 22,
+    },
+    aboutFacilitiesRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    aboutPill: {
+      backgroundColor: c.surface.raised,
+      borderRadius: 20,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    aboutPillText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: c.text.muted,
+    },
+
+    // ── Sticky footer ──────────────────────────────────────────────────────────
+    footer: {
+      position: 'absolute',
+      left: H_PAD,
+      right: H_PAD,
+      backgroundColor: 'transparent',
+    },
+    submitButton: {
+      height: 58,
+      backgroundColor: c.accent.primary,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: c.accent.primary,
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.32,
+      shadowRadius: 10,
+      elevation: 10,
+      transform: [{ scale: 1.02 }],
+    },
+    submitButtonText: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: c.text.inverse,
+      letterSpacing: 0.3,
+    },
+
+    // ── Loading overlay ────────────────────────────────────────────────────────
+    absoluteLoadingOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(17, 24, 39, 0.5)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 32,
+      zIndex: 99999,
+    },
+    loadingCard: {
+      width: '100%',
+      maxWidth: 280,
+      backgroundColor: c.surface.card,
+      borderRadius: 20,
+      paddingVertical: 28,
+      paddingHorizontal: 24,
+      alignItems: 'center',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.15,
+      shadowRadius: 24,
+      elevation: 8,
+    },
+    loadingText: {
+      marginTop: 16,
+      fontSize: 15,
+      fontWeight: '600',
+      color: c.text.primary,
+      textAlign: 'center',
+    },
+
+    // ── WebView payment ────────────────────────────────────────────────────────
+    paymentSafeArea: {
+      flex: 1,
+      backgroundColor: c.background.primary,
+    },
+    paymentHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      backgroundColor: c.background.primary,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border.default,
+    },
+    paymentCloseButton: {
+      minWidth: 110,
+      paddingVertical: 6,
+    },
+    paymentCloseText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: c.status.danger,
+    },
+    paymentHeaderTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: c.text.primary,
+      letterSpacing: -0.2,
+    },
+    paymentHeaderSpacer: { minWidth: 110 },
+    webView: {
+      flex: 1,
+      backgroundColor: c.background.secondary,
+    },
+    webViewLoader: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: c.background.secondary,
+    },
+  });
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 type SectionTitleProps = { children: string };
 
 function SectionTitle({ children }: SectionTitleProps) {
-  return <Text style={styles.sectionTitle}>{children}</Text>;
+  const { theme, colorScheme } = useTheme();
+  const S = useMemo(() => makeStyles(theme.colors, colorScheme === 'dark'), [theme, colorScheme]);
+  return <Text style={S.sectionTitle}>{children}</Text>;
 }
 
 function TrustBanner() {
+  const { theme, colorScheme } = useTheme();
+  const c = theme.colors;
+  const S = useMemo(() => makeStyles(theme.colors, colorScheme === 'dark'), [theme, colorScheme]);
+
   return (
-    <View style={styles.trustBanner}>
-      <ShieldCheck size={18} color="#15803D" strokeWidth={2.2} />
-      <Text style={styles.trustBannerText}>
+    <View style={S.trustBanner}>
+      <ShieldCheck size={18} color={c.status.success} strokeWidth={2.2} />
+      <Text style={S.trustBannerText}>
         Ücretsiz İptal: Maça 12 saat kalana kadar kesintisiz iade hakkı.
       </Text>
     </View>
@@ -108,12 +500,15 @@ function TrustBanner() {
 type AmenityCardProps = { icon: string; title: string; subtitle: string };
 
 function AmenityCard({ icon, title, subtitle }: AmenityCardProps) {
+  const { theme, colorScheme } = useTheme();
+  const S = useMemo(() => makeStyles(theme.colors, colorScheme === 'dark'), [theme, colorScheme]);
+
   return (
-    <View style={styles.amenityCard}>
-      <Text style={styles.amenityIcon}>{icon}</Text>
-      <View style={styles.amenityTextWrap}>
-        <Text style={styles.amenityTitle} numberOfLines={1}>{title}</Text>
-        <Text style={styles.amenitySubtitle} numberOfLines={1}>{subtitle}</Text>
+    <View style={S.amenityCard}>
+      <Text style={S.amenityIcon}>{icon}</Text>
+      <View style={S.amenityTextWrap}>
+        <Text style={S.amenityTitle} numberOfLines={1}>{title}</Text>
+        <Text style={S.amenitySubtitle} numberOfLines={1}>{subtitle}</Text>
       </View>
     </View>
   );
@@ -128,6 +523,10 @@ export function BookingScreen() {
   const { requireVerification } = useVerificationGuard();
   const route      = useRoute<RouteProp<ExploreStackParamList, 'BookingScreen'>>();
   const { clubId } = route.params;
+
+  const { theme, colorScheme } = useTheme();
+  const c = theme.colors;
+  const S = useMemo(() => makeStyles(theme.colors, colorScheme === 'dark'), [theme, colorScheme]);
 
   const clubCourts = useMemo(() => getCourtsByClubId(clubId), [clubId]);
   const club       = useMemo(() => getClubById(clubId), [clubId]);
@@ -152,14 +551,14 @@ export function BookingScreen() {
     Object.fromEntries(clubCourts.map((c) => [c.id, c.basePrice])),
   );
 
-  const canSubmit = selectedDate !== null && selectedSlot !== null;
+  const canSubmit    = selectedDate !== null && selectedSlot !== null;
   const isProcessing = isLocking || isPaymentLoading;
   const isInPaymentFlow = showMockPayment || paymentUrl !== null;
 
   const selectedCourt = getCourtById(selectedCourtId);
-  const courtPrice = livePrices[selectedCourtId] ?? selectedCourt.basePrice;
-  const heroImageUrl = club.imageUrl || HERO_IMAGE;
-  const footerBottom = TAB_BAR_BOTTOM + TAB_BAR_HEIGHT + FOOTER_SAFE_PAD + insets.bottom;
+  const courtPrice    = livePrices[selectedCourtId] ?? selectedCourt.basePrice;
+  const heroImageUrl  = club.imageUrl || HERO_IMAGE;
+  const footerBottom  = TAB_BAR_BOTTOM + TAB_BAR_HEIGHT + FOOTER_SAFE_PAD + insets.bottom;
 
   const amenities = useMemo(
     () =>
@@ -391,25 +790,25 @@ export function BookingScreen() {
 
   if (paymentUrl) {
     return (
-      <View style={[styles.paymentSafeArea, { paddingTop: insets.top }]}>
-        <View style={styles.paymentHeader}>
+      <View style={[S.paymentSafeArea, { paddingTop: insets.top }]}>
+        <View style={S.paymentHeader}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={handleAbortPayment}
-            style={styles.paymentCloseButton}
+            style={S.paymentCloseButton}
           >
-            <Text style={styles.paymentCloseText}>Vazgeç / Kapat</Text>
+            <Text style={S.paymentCloseText}>Vazgeç / Kapat</Text>
           </TouchableOpacity>
-          <Text style={styles.paymentHeaderTitle}>Güvenli Ödeme</Text>
-          <View style={styles.paymentHeaderSpacer} />
+          <Text style={S.paymentHeaderTitle}>Güvenli Ödeme</Text>
+          <View style={S.paymentHeaderSpacer} />
         </View>
         <WebView
           source={{ uri: paymentUrl }}
-          style={styles.webView}
+          style={S.webView}
           startInLoadingState
           renderLoading={() => (
-            <View style={styles.webViewLoader}>
-              <ActivityIndicator size="large" color="#22C55E" />
+            <View style={S.webViewLoader}>
+              <ActivityIndicator size="large" color={c.accent.primary} />
             </View>
           )}
         />
@@ -420,19 +819,19 @@ export function BookingScreen() {
   // ─── Main screen ─────────────────────────────────────────────────────────────
 
   return (
-    <View style={styles.container}>
+    <View style={S.container}>
       <ScrollView
-        style={styles.scrollView}
+        style={S.scrollView}
         contentContainerStyle={[
-          styles.scrollContent,
+          S.scrollContent,
           canSubmit && { paddingBottom: footerBottom + 72 },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         {/* ── Premium hero header ──────────────────── */}
-        <View style={styles.hero}>
-          <Image source={{ uri: heroImageUrl }} style={styles.heroImage} resizeMode="cover" />
+        <View style={S.hero}>
+          <Image source={{ uri: heroImageUrl }} style={S.heroImage} resizeMode="cover" />
 
           <Svg style={StyleSheet.absoluteFillObject} pointerEvents="none">
             <Defs>
@@ -448,63 +847,63 @@ export function BookingScreen() {
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => navigation.goBack()}
-            style={[styles.backButton, { top: insets.top + 10 }]}
+            style={[S.backButton, { top: insets.top + 10 }]}
             hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
           >
             <Ionicons name="chevron-back" size={22} color="#0F172A" />
           </TouchableOpacity>
 
-          <View style={styles.heroContent}>
-            <Text style={styles.heroClubName} numberOfLines={2}>{club.name}</Text>
-            <View style={styles.heroAddressRow}>
+          <View style={S.heroContent}>
+            <Text style={S.heroClubName} numberOfLines={2}>{club.name}</Text>
+            <View style={S.heroAddressRow}>
               <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
-              <Text style={styles.heroAddress} numberOfLines={1}>{club.address}</Text>
+              <Text style={S.heroAddress} numberOfLines={1}>{club.address}</Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.body}>
+        <View style={S.body}>
           {bookingToastVisible && (
-            <View style={styles.bookingToast} pointerEvents="none">
-              <Ionicons name="checkmark-circle" size={16} color="#15803D" style={{ marginRight: 6 }} />
-              <Text style={styles.bookingToastText}>Slot başarıyla ayrıldı!</Text>
+            <View style={S.bookingToast} pointerEvents="none">
+              <Ionicons name="checkmark-circle" size={16} color={c.status.success} style={{ marginRight: 6 }} />
+              <Text style={S.bookingToastText}>Slot başarıyla ayrıldı!</Text>
             </View>
           )}
 
           {IS_MOCK_MODE ? (
-            <View style={styles.mockBanner}>
-              <Text style={styles.mockBannerText}>🧪 Mock ödeme modu aktif</Text>
+            <View style={S.mockBanner}>
+              <Text style={S.mockBannerText}>🧪 Mock ödeme modu aktif</Text>
             </View>
           ) : null}
 
           {/* ── Price section ─────────────────────────── */}
-          <View style={styles.priceCard}>
-            <View style={styles.priceMeta}>
-              <Text style={styles.priceLabel}>Seçili Kort</Text>
-              <Text style={styles.priceCourtName} numberOfLines={1}>
+          <View style={S.priceCard}>
+            <View style={S.priceMeta}>
+              <Text style={S.priceLabel}>Seçili Kort</Text>
+              <Text style={S.priceCourtName} numberOfLines={1}>
                 {selectedCourt.name} · {selectedCourt.surface}
               </Text>
             </View>
-            <View style={styles.priceAmountWrap}>
-              <Text style={styles.priceAmount}>₺{courtPrice}</Text>
-              <Text style={styles.priceUnit}>/ saat</Text>
+            <View style={S.priceAmountWrap}>
+              <Text style={S.priceAmount}>₺{courtPrice}</Text>
+              <Text style={S.priceUnit}>/ saat</Text>
             </View>
           </View>
 
           <TrustBanner />
 
           {/* ── Booking flow ──────────────────────────── */}
-          <View style={styles.bookingSection}>
-            <Text style={styles.bookingSectionLabel}>Tarih Seçin</Text>
+          <View style={S.bookingSection}>
+            <Text style={S.bookingSectionLabel}>Tarih Seçin</Text>
             <HorizontalDayPicker
               selectedDate={selectedDate}
               onSelectDate={handleSelectDate}
             />
           </View>
 
-          <View style={styles.bookingSection}>
-            <Text style={styles.bookingSectionLabel}>Kort Seçin</Text>
-            <View style={styles.courtPickerWrapper}>
+          <View style={S.bookingSection}>
+            <Text style={S.bookingSectionLabel}>Kort Seçin</Text>
+            <View style={S.courtPickerWrapper}>
               <CourtPicker
                 courts={clubCourts}
                 selectedCourtId={selectedCourtId}
@@ -514,8 +913,8 @@ export function BookingScreen() {
             </View>
           </View>
 
-          <View style={styles.bookingSection}>
-            <Text style={styles.bookingSectionLabel}>Saat Seçin</Text>
+          <View style={S.bookingSection}>
+            <Text style={S.bookingSectionLabel}>Saat Seçin</Text>
             {selectedDate ? (
               <TimeSlotGrid
                 key={`${selectedCourtId}_${selectedDate}`}
@@ -525,9 +924,9 @@ export function BookingScreen() {
                 currentUserId={uid}
               />
             ) : (
-              <View style={styles.emptySlotHint}>
-                <Text style={styles.emptySlotIcon}>📅</Text>
-                <Text style={styles.emptySlotText}>
+              <View style={S.emptySlotHint}>
+                <Text style={S.emptySlotIcon}>📅</Text>
+                <Text style={S.emptySlotText}>
                   Uygun saatleri görmek için{'\n'}bir tarih seçin
                 </Text>
               </View>
@@ -535,10 +934,10 @@ export function BookingScreen() {
           </View>
 
           {/* ── İptal Politikası ──────────────────────── */}
-          <View style={styles.contentSection}>
+          <View style={S.contentSection}>
             <SectionTitle>İptal Politikası</SectionTitle>
-            <View style={styles.policyCard}>
-              <Text style={styles.policyText}>
+            <View style={S.policyCard}>
+              <Text style={S.policyText}>
                 Maç başlangıcına 12 saatten fazla süre varsa rezervasyonunuzu ücretsiz
                 iptal edebilirsiniz. İade tutarı 1–3 iş günü içinde hesabınıza yansır.
               </Text>
@@ -546,9 +945,9 @@ export function BookingScreen() {
           </View>
 
           {/* ── Olanaklar ─────────────────────────────── */}
-          <View style={styles.contentSection}>
+          <View style={S.contentSection}>
             <SectionTitle>Olanaklar</SectionTitle>
-            <View style={styles.amenitiesGrid}>
+            <View style={S.amenitiesGrid}>
               {amenities.map((item) => (
                 <AmenityCard
                   key={item.title}
@@ -561,14 +960,14 @@ export function BookingScreen() {
           </View>
 
           {/* ── Tesis Hakkında ────────────────────────── */}
-          <View style={styles.contentSection}>
+          <View style={S.contentSection}>
             <SectionTitle>Tesis Hakkında</SectionTitle>
-            <View style={styles.aboutCard}>
-              <Text style={styles.aboutText}>{aboutText}</Text>
-              <View style={styles.aboutFacilitiesRow}>
+            <View style={S.aboutCard}>
+              <Text style={S.aboutText}>{aboutText}</Text>
+              <View style={S.aboutFacilitiesRow}>
                 {club.facilities.map((facility) => (
-                  <View key={facility} style={styles.aboutPill}>
-                    <Text style={styles.aboutPillText}>{facility}</Text>
+                  <View key={facility} style={S.aboutPill}>
+                    <Text style={S.aboutPillText}>{facility}</Text>
                   </View>
                 ))}
               </View>
@@ -581,18 +980,18 @@ export function BookingScreen() {
         <Animated.View
           entering={SlideInDown.duration(320).easing(CUBIC_OUT)}
           exiting={SlideOutDown.duration(220)}
-          style={[styles.footer, { bottom: footerBottom }]}
+          style={[S.footer, { bottom: footerBottom }]}
         >
           <TouchableOpacity
             activeOpacity={0.85}
             disabled={isProcessing}
             onPress={handleBooking}
-            style={styles.submitButton}
+            style={S.submitButton}
           >
             {isProcessing ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={c.text.inverse} />
             ) : (
-              <Text style={styles.submitButtonText}>Rezervasyon Yap</Text>
+              <Text style={S.submitButtonText}>Rezervasyon Yap</Text>
             )}
           </TouchableOpacity>
         </Animated.View>
@@ -623,395 +1022,13 @@ export function BookingScreen() {
       ) : null}
 
       {isProcessing && (
-        <View style={styles.absoluteLoadingOverlay}>
-          <View style={styles.loadingCard}>
-            <ActivityIndicator size="large" color="#22C55E" />
-            <Text style={styles.loadingText}>Ödeme sayfası hazırlanıyor…</Text>
+        <View style={S.absoluteLoadingOverlay}>
+          <View style={S.loadingCard}>
+            <ActivityIndicator size="large" color={c.accent.primary} />
+            <Text style={S.loadingText}>Ödeme sayfası hazırlanıyor…</Text>
           </View>
         </View>
       )}
     </View>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-
-  scrollView: { flex: 1 },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: TAB_BAR_BOTTOM + TAB_BAR_HEIGHT + FOOTER_SAFE_PAD + 80,
-  },
-
-  // ── Hero ───────────────────────────────────────────────────────────────────
-  hero: {
-    height: 280,
-    position: 'relative',
-    backgroundColor: '#0F172A',
-  },
-  heroImage: {
-    ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-  },
-  backButton: {
-    position: 'absolute',
-    left: H_PAD,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-    zIndex: 2,
-  },
-  heroContent: {
-    position: 'absolute',
-    left: H_PAD,
-    right: H_PAD,
-    bottom: 22,
-    zIndex: 2,
-    gap: 6,
-  },
-  heroClubName: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.6,
-    lineHeight: 34,
-  },
-  heroAddressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  heroAddress: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.88)',
-  },
-
-  // ── Body ───────────────────────────────────────────────────────────────────
-  body: {
-    paddingHorizontal: H_PAD,
-    paddingTop: SECTION_GAP,
-    gap: SECTION_GAP,
-  },
-
-  bookingToast: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-  },
-  bookingToastText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#15803D',
-  },
-
-  mockBanner: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  mockBannerText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#92400E',
-    textAlign: 'center',
-  },
-
-  // ── Price ──────────────────────────────────────────────────────────────────
-  priceCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1,
-  },
-  priceMeta: { flex: 1, marginRight: 12, gap: 4 },
-  priceLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  priceCourtName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111827',
-    letterSpacing: -0.2,
-  },
-  priceAmountWrap: { alignItems: 'flex-end' },
-  priceAmount: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#0F172A',
-    letterSpacing: -0.5,
-  },
-  priceUnit: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginTop: 2,
-  },
-
-  // ── Trust banner ───────────────────────────────────────────────────────────
-  trustBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#F0FDF4',
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
-  },
-  trustBannerText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#166534',
-    lineHeight: 19,
-  },
-
-  // ── Booking sections ───────────────────────────────────────────────────────
-  bookingSection: { gap: 14 },
-  bookingSectionLabel: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111827',
-    letterSpacing: -0.3,
-  },
-  courtPickerWrapper: {
-    marginHorizontal: -H_PAD,
-  },
-
-  emptySlotHint: {
-    alignItems: 'center',
-    paddingVertical: 36,
-    gap: 10,
-  },
-  emptySlotIcon: { fontSize: 36 },
-  emptySlotText: {
-    fontSize: 15,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-
-  // ── Content sections ───────────────────────────────────────────────────────
-  contentSection: { gap: 14 },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.9,
-  },
-
-  policyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E7EB',
-  },
-  policyText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    lineHeight: 22,
-  },
-
-  amenitiesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  amenityCard: {
-    width: '48%',
-    flexGrow: 1,
-    flexBasis: '46%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E7EB',
-  },
-  amenityIcon: { fontSize: 22 },
-  amenityTextWrap: { flex: 1, gap: 1 },
-  amenityTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  amenitySubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-
-  aboutCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    gap: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E7EB',
-  },
-  aboutText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    lineHeight: 22,
-  },
-  aboutFacilitiesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  aboutPill: {
-    backgroundColor: '#F1F5F9',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  aboutPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-  },
-
-  // ── Sticky footer ──────────────────────────────────────────────────────────
-  footer: {
-    position: 'absolute',
-    left: H_PAD,
-    right: H_PAD,
-    backgroundColor: 'transparent',
-  },
-  submitButton: {
-    height: 58,
-    backgroundColor: '#0F172A',
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.32,
-    shadowRadius: 10,
-    elevation: 10,
-    transform: [{ scale: 1.02 }],
-  },
-  submitButtonText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-  },
-
-  // ── Loading overlay ────────────────────────────────────────────────────────
-  absoluteLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(17, 24, 39, 0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    zIndex: 99999,
-  },
-  loadingCard: {
-    width: '100%',
-    maxWidth: 280,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingVertical: 28,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 8,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#374151',
-    textAlign: 'center',
-  },
-
-  // ── WebView payment ────────────────────────────────────────────────────────
-  paymentSafeArea: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  paymentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
-  },
-  paymentCloseButton: {
-    minWidth: 110,
-    paddingVertical: 6,
-  },
-  paymentCloseText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#EF4444',
-  },
-  paymentHeaderTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111827',
-    letterSpacing: -0.2,
-  },
-  paymentHeaderSpacer: { minWidth: 110 },
-  webView: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  webViewLoader: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F9FAFB',
-  },
-});

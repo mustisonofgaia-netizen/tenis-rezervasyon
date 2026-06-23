@@ -1,6 +1,6 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { DarkTheme, NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -13,7 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './src/context/AuthContext';
-import { ThemeProvider } from './src/context/ThemeContext';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import * as Haptics from 'expo-haptics';
 import { registerForPushNotificationsAsync } from './src/services/notificationService';
 import { AdminDashboardScreen } from './src/screens/AdminDashboardScreen';
@@ -80,11 +80,22 @@ const TAB_LABEL: Record<string, string> = {
 };
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
+  const { theme, colorScheme } = useTheme();
+  const c = theme.colors;
+
   return (
-    <View style={styles.tabBar}>
+    <View
+      style={[
+        styles.tabBar,
+        {
+          backgroundColor:
+            colorScheme === 'dark' ? c.surface.raised : '#FFFFFF',
+        },
+      ]}
+    >
       {state.routes.map((route, index) => {
         const isFocused = state.index === index;
-        const tint = isFocused ? '#22C55E' : '#94A3B8';
+        const tint = isFocused ? c.accent.primary : c.text.muted;
 
         const onPress = () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -209,6 +220,71 @@ function SplashLoader() {
   );
 }
 
+// ─── AppNavigator — lives inside ThemeProvider, drives dynamic nav theme ─────
+//
+// Keeping this as a separate component (rather than inlining into App) is the
+// only way to call useTheme() for NavigationContainer's theme prop, since
+// hooks must be called inside the provider tree.
+
+function AppNavigator({ authState }: { authState: AuthState }) {
+  const { colorScheme, theme } = useTheme();
+
+  // Build the React Navigation theme that matches our active design-system
+  // scheme.  Overriding `background` prevents the native root view from
+  // flashing white during iOS over-scroll or Android activity transitions.
+  const navTheme =
+    colorScheme === 'dark'
+      ? {
+          ...DarkTheme,
+          colors: {
+            ...DarkTheme.colors,
+            background: theme.colors.background.primary,
+          },
+        }
+      : {
+          ...DefaultTheme,
+          colors: {
+            ...DefaultTheme.colors,
+            background: theme.colors.background.primary,
+          },
+        };
+
+  if (authState.phase === 'loading') {
+    return (
+      <>
+        <SplashLoader />
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      </>
+    );
+  }
+
+  if (authState.phase === 'unauthenticated') {
+    return (
+      <>
+        <LoginScreen />
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      </>
+    );
+  }
+
+  return (
+    <AuthProvider
+      uid={authState.uid}
+      role={authState.role}
+      managedClubId={authState.managedClubId}
+    >
+      <NavigationContainer theme={navTheme}>
+        {authState.role === 'club_admin' || authState.role === 'super_admin' ? (
+          <AdminNavigator />
+        ) : (
+          <PlayerNavigator />
+        )}
+      </NavigationContainer>
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+    </AuthProvider>
+  );
+}
+
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -261,35 +337,11 @@ export default function App() {
     };
   }, []);
 
-  const renderContent = () => {
-    if (authState.phase === 'loading') return <SplashLoader />;
-    if (authState.phase === 'unauthenticated') return <LoginScreen />;
-
-    return (
-      <AuthProvider
-        uid={authState.uid}
-        role={authState.role}
-        managedClubId={authState.managedClubId}
-      >
-          <NavigationContainer
-            theme={{ ...DarkTheme, colors: { ...DarkTheme.colors, background: '#0f172a' } }}
-          >
-          {authState.role === 'club_admin' || authState.role === 'super_admin' ? (
-            <AdminNavigator />
-          ) : (
-            <PlayerNavigator />
-          )}
-        </NavigationContainer>
-      </AuthProvider>
-    );
-  };
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-          {renderContent()}
-          <StatusBar style="auto" />
+          <AppNavigator authState={authState} />
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -77,11 +77,12 @@ export const darkColors: ColorTokens = {
   text: {
     primary: palette.slate100,
     muted:   palette.slate400,
+    // slate900 on sage400 → 6.9 : 1 — text/icons rendered ON the accent surface.
     inverse: palette.slate900,
   },
   border: {
     default: palette.slate700,
-    focus:   palette.lime300,
+    focus:   palette.sage400,
   },
   status: {
     success: palette.green500,
@@ -89,10 +90,9 @@ export const darkColors: ColorTokens = {
     warning: palette.amber500,
   },
   accent: {
-    // emerald500 (#10b981) — professional, calming, high-trust on dark backgrounds.
-    // Dark slate900 text (text.inverse) achieves 7+ :1 contrast on this surface.
-    primary:   palette.emerald500,
-    secondary: palette.emerald600,
+    // sage400 (#87a96b) — soft, muted sage green; calming and high-trust on dark bg.
+    primary:   palette.sage400,
+    secondary: palette.sage500,
   },
 };
 
@@ -110,11 +110,12 @@ export const lightColors: ColorTokens = {
   text: {
     primary: palette.slate900,
     muted:   palette.slate500,
+    // #ffffff on pine600 → 5.0 : 1 — text/icons rendered ON the accent surface.
     inverse: palette.white,
   },
   border: {
     default: palette.slate200,
-    focus:   palette.blue500,
+    focus:   palette.pine600,
   },
   status: {
     success: palette.green600,
@@ -122,8 +123,9 @@ export const lightColors: ColorTokens = {
     warning: palette.amber600,
   },
   accent: {
-    primary:   palette.green500,
-    secondary: palette.lime500,
+    // pine600 (#4f7942) — deep, rich pine green; authoritative on light backgrounds.
+    primary:   palette.pine600,
+    secondary: palette.sage500,
   },
 };
 

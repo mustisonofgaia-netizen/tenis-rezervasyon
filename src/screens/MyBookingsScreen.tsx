@@ -26,6 +26,8 @@ import {
 } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import type { ColorTokens } from '../theme/tokens';
 import { useVerificationGuard } from '../hooks/useVerificationGuard';
 import { resolveFullCourtLabel } from '../config/data';
 import { cancelBooking, subscribeToUserBookings } from '../services/bookingService';
@@ -45,14 +47,11 @@ const DELETE_ACTION_WIDTH = SNAP_OPEN;
 const SPRING_CONFIG       = { mass: 0.2, damping: 15, stiffness: 120 } as const;
 const STAGGER_MS          = 70;
 
-// Activity type accent colors
-const ACCENT_PURE   = '#D1D5DB';  // gray  — plain reservation
-const ACCENT_HOSTED = '#22C55E';  // green — hosted match listing
-const ACCENT_JOINED = '#3B82F6';  // blue  — joined as participant
-
-// Segmented control
-const SEG_NEAR_BLACK = '#0F172A';
-const SEG_LIME       = '#DEFF9A';
+/**
+ * `ACCENT_JOINED` is a semantic indicator colour (blue = participant).
+ * It stays fixed across light and dark mode.
+ */
+const ACCENT_JOINED = '#3B82F6';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -79,20 +78,228 @@ type ActivityItem =
   | { kind: 'booking';     id: string; booking: ConfirmedBooking; match: MatchDocument | null }
   | { kind: 'joinedMatch'; id: string; match: MatchDocument };
 
+// ─── Theme-aware style factory ────────────────────────────────────────────────
+
+function makeStyles(c: ColorTokens, isDark: boolean) {
+  return StyleSheet.create({
+    safeArea:        { flex: 1, backgroundColor: c.background.secondary },
+    loaderContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    listWrapper:     { flex: 1 },
+
+    // ── Static header + segmented control ──────────────────────────────────
+    staticHeader: {
+      paddingTop: 20,
+      paddingHorizontal: 20,
+      paddingBottom: 4,
+      backgroundColor: c.background.secondary,
+    },
+    header: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: c.text.primary,
+      letterSpacing: -0.5,
+      marginBottom: 16,
+    },
+
+    // ── Segmented control ───────────────────────────────────────────────────
+    // The track uses `surface.raised` so it adapts: elevated dark (dark mode)
+    // vs. light grey (light mode). The active pill is always accent.primary.
+    segWrapper: {
+      flexDirection: 'row',
+      backgroundColor: c.surface.raised,
+      borderRadius: 18,
+      padding: 5,
+      marginBottom: 12,
+    },
+    segTab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      borderRadius: 14,
+      gap: 6,
+    },
+    segTabActive:         { backgroundColor: c.accent.primary },
+    segTabText:           { fontSize: 13, fontWeight: '700', color: c.text.muted, letterSpacing: 0.1 },
+    segTabTextActive:     { color: c.text.inverse },
+    segCount: {
+      minWidth: 20,
+      height: 20,
+      borderRadius: 10,
+      // Subtle tint on the inactive tab track.
+      backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : c.border.default,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 5,
+    },
+    segCountActive: {
+      // On the accent pill: dark overlay in dark mode, light overlay in light mode.
+      backgroundColor: isDark ? 'rgba(15,23,42,0.20)' : 'rgba(255,255,255,0.25)',
+    },
+    segCountText:       { fontSize: 11, fontWeight: '800', color: c.text.muted },
+    segCountTextActive: { color: c.text.inverse },
+
+    // ── List ───────────────────────────────────────────────────────────────
+    listContent:      { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120 },
+    listContentEmpty: { flexGrow: 1 },
+
+    // ── Activity type badge ─────────────────────────────────────────────────
+    typeBadge: {
+      alignSelf: 'flex-start',
+      borderWidth: 1,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      marginBottom: 10,
+    },
+    typeBadgeText: {
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.2,
+    },
+
+    // ── Swipe row ───────────────────────────────────────────────────────────
+    swipeRow:    { marginBottom: 14 },
+    deleteAction: {
+      position: 'absolute', top: 0, right: 0, bottom: 0,
+      width: DELETE_ACTION_WIDTH,
+      // Delete action is always red — semantic danger colour.
+      backgroundColor: c.status.danger,
+      borderTopRightRadius: 18, borderBottomRightRadius: 18,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    deleteActionContent: { alignItems: 'center', gap: 5 },
+    deleteActionIcon:    { fontSize: 22 },
+    // Label is always white since it sits on the danger (red) surface.
+    deleteActionLabel:   { fontSize: 11, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.4 },
+
+    // ── Base card (booking, swipeable) ──────────────────────────────────────
+    card: {
+      backgroundColor: c.surface.card,
+      borderRadius: 18,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: c.border.default,
+      borderLeftWidth: 4,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.05,
+      shadowRadius: 12,
+      elevation: 2,
+    },
+
+    // ── Joined-match card ───────────────────────────────────────────────────
+    joinedCardWrapper: { marginBottom: 14 },
+    joinedCard: {
+      backgroundColor: c.surface.card,
+      borderRadius: 18,
+      padding: 18,
+      borderWidth: 1,
+      // Blue accent border — semantic to "joined" activity type, stays blue.
+      borderColor: 'rgba(59,130,246,0.25)',
+      borderLeftWidth: 4,
+      borderLeftColor: ACCENT_JOINED,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.05,
+      shadowRadius: 12,
+      elevation: 2,
+    },
+
+    // ── Shared card anatomy ─────────────────────────────────────────────────
+    cardHeader: {
+      flexDirection: 'row', alignItems: 'flex-start',
+      justifyContent: 'space-between', marginBottom: 16, gap: 12,
+    },
+    facilityName: { flex: 1, fontSize: 16, fontWeight: '700', color: c.text.primary, lineHeight: 22 },
+    badge: {
+      // "Onaylandı" badge — success tint.
+      backgroundColor: c.status.success + '1A',
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    badgeFull:     { backgroundColor: c.status.warning + '1A' },
+    badgeText:     { fontSize: 12, fontWeight: '700', color: c.status.success, letterSpacing: 0.3 },
+    // "Dolu" badge text: use warning token in dark (bright amber), deep amber in light
+    // so it remains readable against the pale warning tint background.
+    badgeTextFull: { color: isDark ? c.status.warning : '#92400E' },
+    cardBody:      { gap: 12 },
+    infoBlock:     { gap: 4 },
+    infoLabel:     { fontSize: 12, fontWeight: '600', color: c.text.muted, textTransform: 'uppercase', letterSpacing: 0.6 },
+    infoValue:     { fontSize: 15, fontWeight: '600', color: c.text.primary },
+
+    // ── Card footer (CTA row) ───────────────────────────────────────────────
+    cardFooter: {
+      marginTop: 16, paddingTop: 14,
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border.default,
+    },
+    findPlayersButton: {
+      // Accent tint CTA — "find players" button.
+      backgroundColor: c.accent.primary + '14',
+      borderRadius: 12, paddingVertical: 11, alignItems: 'center',
+    },
+    findPlayersText:  { fontSize: 13, fontWeight: '700', color: c.accent.primary, letterSpacing: 0.2 },
+    activeMatchBadge: {
+      // "Maç Yayında" badge — warning/amber tint.
+      backgroundColor: c.status.warning + '14',
+      borderRadius: 12,
+      paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center',
+      borderWidth: 1, borderColor: c.status.warning + '33',
+    },
+    activeMatchText:  {
+      fontSize: 13, fontWeight: '700',
+      color: isDark ? c.status.warning : '#92400E',
+      letterSpacing: 0.1,
+    },
+    joinedBadgeRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    // Joined badge text: always blue (semantic "participant" indicator).
+    joinedBadgeText:  { fontSize: 13, fontWeight: '600', color: ACCENT_JOINED },
+    viewDetailsHint:  { fontSize: 12, fontWeight: '600', color: ACCENT_JOINED },
+
+    // ── Empty state ─────────────────────────────────────────────────────────
+    emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, paddingHorizontal: 24 },
+    emptyTitle: { fontSize: 18, fontWeight: '700', color: c.text.primary, marginBottom: 8, textAlign: 'center' },
+    emptyText:  { fontSize: 14, lineHeight: 22, color: c.text.muted, textAlign: 'center' },
+  });
+}
+
 // ─── Activity type badge ──────────────────────────────────────────────────────
 
 type ActivityKind = 'pure' | 'hosted' | 'joined';
 
 function TypeBadge({ kind }: { kind: ActivityKind }) {
+  const { theme, colorScheme } = useTheme();
+  const c = theme.colors;
+
   const configs: Record<ActivityKind, { label: string; bg: string; text: string; border: string }> = {
-    pure:   { label: '📋 Sadece Rezervasyon',        bg: '#F9FAFB', text: '#6B7280', border: '#E5E7EB' },
-    hosted: { label: '👑 Sizin İlanınız (Kurucu)',   bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' },
-    joined: { label: '🎾 Katılımcı',                 bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' },
+    pure: {
+      label:  '📋 Sadece Rezervasyon',
+      bg:     c.surface.raised,
+      text:   c.text.muted,
+      border: c.border.default,
+    },
+    hosted: {
+      label:  '👑 Sizin İlanınız (Kurucu)',
+      bg:     c.accent.primary + '14',
+      text:   c.accent.primary,
+      border: c.accent.primary + '33',
+    },
+    joined: {
+      // Blue is the fixed semantic colour for "participant".
+      label:  '🎾 Katılımcı',
+      bg:     'rgba(59,130,246,0.08)',
+      text:   '#3B82F6',
+      border: 'rgba(59,130,246,0.25)',
+    },
   };
-  const c = configs[kind];
+
+  const cf = configs[kind];
+  const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme]);
   return (
-    <View style={[styles.typeBadge, { backgroundColor: c.bg, borderColor: c.border }]}>
-      <Text style={[styles.typeBadgeText, { color: c.text }]}>{c.label}</Text>
+    <View style={[S.typeBadge, { backgroundColor: cf.bg, borderColor: cf.border }]}>
+      <Text style={[S.typeBadgeText, { color: cf.text }]}>{cf.label}</Text>
     </View>
   );
 }
@@ -114,10 +321,15 @@ function SwipeableBookingCard({
   activeMatch,
   entryDelay,
 }: SwipeableBookingCardProps) {
-  const { uid }    = useAuth();
+  const { uid }                  = useAuth();
+  const { theme, colorScheme }   = useTheme();
+  const c                        = theme.colors;
+  const isDark                   = colorScheme === 'dark';
+  const S          = useMemo(() => makeStyles(c, isDark), [theme]);
   const translateX = useSharedValue(0);
 
-  const accentColor  = activeMatch ? ACCENT_HOSTED : ACCENT_PURE;
+  // Adapt accent colors to the active theme.
+  const accentColor  = activeMatch ? c.accent.primary : c.border.default;
   const activityKind: ActivityKind = activeMatch ? 'hosted' : 'pure';
 
   const doCancel = useCallback(() => {
@@ -182,46 +394,46 @@ function SwipeableBookingCard({
     <Animated.View
       entering={FadeInDown.delay(entryDelay).duration(400).easing(Easing.out(Easing.cubic))}
       exiting={FadeOut.duration(280)}
-      style={styles.swipeRow}
+      style={S.swipeRow}
     >
       {/* Red delete panel */}
-      <View style={styles.deleteAction}>
-        <Animated.View style={[styles.deleteActionContent, actionStyle]}>
-          <Text style={styles.deleteActionIcon}>🗑️</Text>
-          <Text style={styles.deleteActionLabel}>İptal Et</Text>
+      <View style={S.deleteAction}>
+        <Animated.View style={[S.deleteActionContent, actionStyle]}>
+          <Text style={S.deleteActionIcon}>🗑️</Text>
+          <Text style={S.deleteActionLabel}>İptal Et</Text>
         </Animated.View>
       </View>
 
       <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.card, { borderLeftColor: accentColor }, cardStyle]}>
+        <Animated.View style={[S.card, { borderLeftColor: accentColor }, cardStyle]}>
           <TypeBadge kind={activityKind} />
 
-          <View style={styles.cardHeader}>
-            <Text style={styles.facilityName}>{resolveCourtName(booking.courtId)}</Text>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>Onaylandı</Text>
+          <View style={S.cardHeader}>
+            <Text style={S.facilityName}>{resolveCourtName(booking.courtId)}</Text>
+            <View style={S.badge}>
+              <Text style={S.badgeText}>Onaylandı</Text>
             </View>
           </View>
 
-          <View style={styles.cardBody}>
-            <View style={styles.infoBlock}>
-              <Text style={styles.infoLabel}>Tarih</Text>
-              <Text style={styles.infoValue}>{formatBookingDate(booking.date)}</Text>
+          <View style={S.cardBody}>
+            <View style={S.infoBlock}>
+              <Text style={S.infoLabel}>Tarih</Text>
+              <Text style={S.infoValue}>{formatBookingDate(booking.date)}</Text>
             </View>
-            <View style={styles.infoBlock}>
-              <Text style={styles.infoLabel}>Saat</Text>
-              <Text style={styles.infoValue}>{booking.slotTime}</Text>
+            <View style={S.infoBlock}>
+              <Text style={S.infoLabel}>Saat</Text>
+              <Text style={S.infoValue}>{booking.slotTime}</Text>
             </View>
           </View>
 
-          <View style={styles.cardFooter}>
+          <View style={S.cardFooter}>
             {activeMatch ? (
               <TouchableOpacity
-                style={styles.activeMatchBadge}
+                style={S.activeMatchBadge}
                 activeOpacity={0.75}
                 onPress={() => onViewMatch(activeMatch)}
               >
-                <Text style={styles.activeMatchText}>
+                <Text style={S.activeMatchText}>
                   {'📢  İlan Yayında · '}
                   {activeMatch.joinedPlayers.length}/{activeMatch.requiredPlayers}
                   {' Oyuncu  →'}
@@ -229,11 +441,11 @@ function SwipeableBookingCard({
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={styles.findPlayersButton}
+                style={S.findPlayersButton}
                 activeOpacity={0.75}
                 onPress={() => onFindPlayers(booking)}
               >
-                <Text style={styles.findPlayersText}>🎾  Oyuncu Ara</Text>
+                <Text style={S.findPlayersText}>🎾  Oyuncu Ara</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -252,43 +464,47 @@ type JoinedMatchCardProps = {
 };
 
 function JoinedMatchCard({ match, onViewDetails, entryDelay }: JoinedMatchCardProps) {
+  const { theme, colorScheme } = useTheme();
+  const c = theme.colors;
+  const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme]);
+
   const courtName = resolveCourtName(match.courtId);
   const isFull    = match.status === 'FULL';
 
   return (
     <Animated.View
       entering={FadeInDown.delay(entryDelay).duration(400).easing(Easing.out(Easing.cubic))}
-      style={styles.joinedCardWrapper}
+      style={S.joinedCardWrapper}
     >
-      <TouchableOpacity activeOpacity={0.78} onPress={onViewDetails} style={styles.joinedCard}>
+      <TouchableOpacity activeOpacity={0.78} onPress={onViewDetails} style={S.joinedCard}>
         <TypeBadge kind="joined" />
 
-        <View style={styles.cardHeader}>
-          <Text style={styles.facilityName}>{courtName}</Text>
-          <View style={[styles.badge, isFull && styles.badgeFull]}>
-            <Text style={[styles.badgeText, isFull && styles.badgeTextFull]}>
+        <View style={S.cardHeader}>
+          <Text style={S.facilityName}>{courtName}</Text>
+          <View style={[S.badge, isFull && S.badgeFull]}>
+            <Text style={[S.badgeText, isFull && S.badgeTextFull]}>
               {isFull ? 'Dolu' : 'Açık'}
             </Text>
           </View>
         </View>
 
-        <View style={styles.cardBody}>
-          <View style={styles.infoBlock}>
-            <Text style={styles.infoLabel}>Tarih</Text>
-            <Text style={styles.infoValue}>{formatBookingDate(match.date)}</Text>
+        <View style={S.cardBody}>
+          <View style={S.infoBlock}>
+            <Text style={S.infoLabel}>Tarih</Text>
+            <Text style={S.infoValue}>{formatBookingDate(match.date)}</Text>
           </View>
-          <View style={styles.infoBlock}>
-            <Text style={styles.infoLabel}>Saat</Text>
-            <Text style={styles.infoValue}>{match.slotTime}</Text>
+          <View style={S.infoBlock}>
+            <Text style={S.infoLabel}>Saat</Text>
+            <Text style={S.infoValue}>{match.slotTime}</Text>
           </View>
         </View>
 
-        <View style={styles.cardFooter}>
-          <View style={styles.joinedBadgeRow}>
-            <Text style={styles.joinedBadgeText}>
+        <View style={S.cardFooter}>
+          <View style={S.joinedBadgeRow}>
+            <Text style={S.joinedBadgeText}>
               {match.joinedPlayers.length}/{match.requiredPlayers} Oyuncu
             </Text>
-            <Text style={styles.viewDetailsHint}>Detayları Gör →</Text>
+            <Text style={S.viewDetailsHint}>Detayları Gör →</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -307,23 +523,27 @@ type SegmentedControlProps = {
 };
 
 function SegmentedControl({ activeIndex, onChange, counts }: SegmentedControlProps) {
+  const { theme, colorScheme } = useTheme();
+  const c = theme.colors;
+  const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme]);
+
   return (
-    <View style={styles.segWrapper}>
+    <View style={S.segWrapper}>
       {TABS.map((label, i) => {
         const isActive = i === activeIndex;
         return (
           <TouchableOpacity
             key={label}
             onPress={() => onChange(i)}
-            style={[styles.segTab, isActive && styles.segTabActive]}
+            style={[S.segTab, isActive && S.segTabActive]}
             activeOpacity={0.75}
           >
-            <Text style={[styles.segTabText, isActive && styles.segTabTextActive]}>
+            <Text style={[S.segTabText, isActive && S.segTabTextActive]}>
               {label}
             </Text>
             {counts[i] > 0 && (
-              <View style={[styles.segCount, isActive && styles.segCountActive]}>
-                <Text style={[styles.segCountText, isActive && styles.segCountTextActive]}>
+              <View style={[S.segCount, isActive && S.segCountActive]}>
+                <Text style={[S.segCountText, isActive && S.segCountTextActive]}>
                   {counts[i]}
                 </Text>
               </View>
@@ -340,6 +560,9 @@ function SegmentedControl({ activeIndex, onChange, counts }: SegmentedControlPro
 export function MyBookingsScreen() {
   const { uid } = useAuth();
   const { requireVerification } = useVerificationGuard();
+  const { theme, colorScheme } = useTheme();
+  const c = theme.colors;
+  const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme]);
 
   // ── Tab navigation ───────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState(0);
@@ -429,9 +652,9 @@ export function MyBookingsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color="#22C55E" />
+      <SafeAreaView style={S.safeArea}>
+        <View style={S.loaderContainer}>
+          <ActivityIndicator size="large" color={c.accent.primary} />
         </View>
       </SafeAreaView>
     );
@@ -454,10 +677,10 @@ export function MyBookingsScreen() {
   ] as const;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={S.safeArea}>
       {/* ── Static header — never re-mounts ────────────────────────────── */}
-      <View style={styles.staticHeader}>
-        <Text style={styles.header}>Etkinliklerim</Text>
+      <View style={S.staticHeader}>
+        <Text style={S.header}>Etkinliklerim</Text>
         <SegmentedControl
           activeIndex={activeTab}
           onChange={handleTabChange}
@@ -469,30 +692,30 @@ export function MyBookingsScreen() {
       <Animated.View
         key={`tab-${activeTab}`}
         entering={listEntering}
-        style={styles.listWrapper}
+        style={S.listWrapper}
       >
         <FlatList<ActivityItem>
           data={activeItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={[
-            styles.listContent,
-            activeItems.length === 0 && styles.listContentEmpty,
+            S.listContent,
+            activeItems.length === 0 && S.listContentEmpty,
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor="#22C55E"
-              colors={['#22C55E']}
+              tintColor={c.accent.primary}
+              colors={[c.accent.primary]}
             />
           }
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>
+            <View style={S.emptyState}>
+              <Text style={S.emptyTitle}>
                 {emptyMessages[activeTab]?.title}
               </Text>
-              <Text style={styles.emptyText}>
+              <Text style={S.emptyText}>
                 {emptyMessages[activeTab]?.body}
               </Text>
             </View>
@@ -543,182 +766,3 @@ export function MyBookingsScreen() {
     </SafeAreaView>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  safeArea:        { flex: 1, backgroundColor: '#F9FAFB' },
-  loaderContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  listWrapper:     { flex: 1 },
-
-  // ── Static header + segmented control ────────────────────────────────────
-  staticHeader: {
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 4,
-    backgroundColor: '#F9FAFB',
-  },
-  header: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-    letterSpacing: -0.5,
-    marginBottom: 16,
-  },
-
-  // ── Segmented control ─────────────────────────────────────────────────────
-  segWrapper: {
-    flexDirection: 'row',
-    backgroundColor: SEG_NEAR_BLACK,
-    borderRadius: 18,
-    padding: 5,
-    marginBottom: 12,
-  },
-  segTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 14,
-    gap: 6,
-  },
-  segTabActive: {
-    backgroundColor: SEG_LIME,
-  },
-  segTabText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#64748B',
-    letterSpacing: 0.1,
-  },
-  segTabTextActive: {
-    color: SEG_NEAR_BLACK,
-  },
-  segCount: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 5,
-  },
-  segCountActive: {
-    backgroundColor: 'rgba(15, 23, 42, 0.14)',
-  },
-  segCountText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#94A3B8',
-  },
-  segCountTextActive: {
-    color: SEG_NEAR_BLACK,
-  },
-
-  // ── List ─────────────────────────────────────────────────────────────────
-  listContent:      { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120 },
-  listContentEmpty: { flexGrow: 1 },
-
-  // ── Activity type badge ───────────────────────────────────────────────────
-  typeBadge: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginBottom: 10,
-  },
-  typeBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-
-  // ── Swipe row ─────────────────────────────────────────────────────────────
-  swipeRow:    { marginBottom: 14 },
-  deleteAction: {
-    position: 'absolute', top: 0, right: 0, bottom: 0,
-    width: DELETE_ACTION_WIDTH,
-    backgroundColor: '#EF4444',
-    borderTopRightRadius: 18, borderBottomRightRadius: 18,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  deleteActionContent: { alignItems: 'center', gap: 5 },
-  deleteActionIcon:    { fontSize: 22 },
-  deleteActionLabel:   { fontSize: 11, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.4 },
-
-  // ── Base card (booking, swipeable) ────────────────────────────────────────
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderLeftWidth: 4,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
-  },
-
-  // ── Joined-match card ─────────────────────────────────────────────────────
-  joinedCardWrapper: { marginBottom: 14 },
-  joinedCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderLeftWidth: 4,
-    borderLeftColor: ACCENT_JOINED,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
-  },
-
-  // ── Shared card anatomy ───────────────────────────────────────────────────
-  cardHeader: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    justifyContent: 'space-between', marginBottom: 16, gap: 12,
-  },
-  facilityName: { flex: 1, fontSize: 16, fontWeight: '700', color: '#111827', lineHeight: 22 },
-  badge: {
-    backgroundColor: '#DCFCE7', borderRadius: 999,
-    paddingHorizontal: 10, paddingVertical: 6,
-  },
-  badgeFull:     { backgroundColor: '#FEF3C7' },
-  badgeText:     { fontSize: 12, fontWeight: '700', color: '#15803D', letterSpacing: 0.3 },
-  badgeTextFull: { color: '#92400E' },
-  cardBody:      { gap: 12 },
-  infoBlock:     { gap: 4 },
-  infoLabel:     { fontSize: 12, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.6 },
-  infoValue:     { fontSize: 15, fontWeight: '600', color: '#374151' },
-
-  // ── Card footer (CTA row) ─────────────────────────────────────────────────
-  cardFooter: {
-    marginTop: 16, paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E5E7EB',
-  },
-  findPlayersButton: {
-    backgroundColor: '#F0FDF4', borderRadius: 12, paddingVertical: 11, alignItems: 'center',
-  },
-  findPlayersText:  { fontSize: 13, fontWeight: '700', color: '#15803D', letterSpacing: 0.2 },
-  activeMatchBadge: {
-    backgroundColor: '#FFFBEB', borderRadius: 12,
-    paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center',
-    borderWidth: 1, borderColor: '#FDE68A',
-  },
-  activeMatchText:  { fontSize: 13, fontWeight: '700', color: '#92400E', letterSpacing: 0.1 },
-  joinedBadgeRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  joinedBadgeText:  { fontSize: 13, fontWeight: '600', color: ACCENT_JOINED },
-  viewDetailsHint:  { fontSize: 12, fontWeight: '600', color: '#93C5FD' },
-
-  // ── Empty state ───────────────────────────────────────────────────────────
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, paddingHorizontal: 24 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8, textAlign: 'center' },
-  emptyText:  { fontSize: 14, lineHeight: 22, color: '#6B7280', textAlign: 'center' },
-});

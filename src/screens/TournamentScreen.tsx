@@ -21,6 +21,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import type { ColorTokens } from '../theme/tokens';
 import type {
   ApprovalFlow,
   ApprovalStatus,
@@ -61,22 +63,11 @@ type CustomLeaderboardEntry = {
   points: number;
 };
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
+// ─── Non-colour layout constants ─────────────────────────────────────────────
 
-const BG          = '#0f172a';
-const CARD        = '#1e293b';
-const CARD_RAISED = '#263352';
-const ACTIVE_TAB  = '#bef264';
-const ACTIVE_TEXT = '#0f172a';
-const TEXT1       = '#f1f5f9';
-const TEXT2       = '#94a3b8';
-const ACCENT      = '#22c55e';
-const RED         = '#ef4444';
-const AMBER       = '#f59e0b';
-const BORDER      = 'rgba(255,255,255,0.07)';
-const H_PAD       = 20;
-const CARD_R      = 16;
-const TAB_H       = 68;
+const H_PAD  = 20;
+const CARD_R = 16;
+const TAB_H  = 68;
 
 const TABS: TournamentTab[] = ['Lig', 'Defi', 'Özel'];
 
@@ -101,59 +92,14 @@ function mapPlayersToLeaderboard(players: TournamentPlayer[]): CustomLeaderboard
   }));
 }
 
-// ─── Loading placeholder ──────────────────────────────────────────────────────
-
-function TabLoadingView() {
-  return (
-    <View style={load.wrap}>
-      <ActivityIndicator size="large" color={ACTIVE_TAB} />
-      <Text style={load.text}>Yükleniyor…</Text>
-    </View>
-  );
-}
-
-const load = StyleSheet.create({
-  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
-  text: { fontSize: 14, fontWeight: '500', color: TEXT2 },
-});
-
-// ─── EmptyView ────────────────────────────────────────────────────────────────
-
-/**
- * Generic empty state.
- * `inline={false}` (default) renders flex:1 centred — use as the root of a tab.
- * `inline={true}` renders a fixed-height block — use inside ScrollView / FlatList.
- */
-function EmptyView({ message, inline }: { message: string; inline?: boolean }) {
-  return (
-    <View style={[ev.base, inline ? ev.inline : ev.screen]}>
-      <Ionicons name="tennisball-outline" size={inline ? 28 : 44} color={BORDER} />
-      <Text style={ev.text}>{message}</Text>
-    </View>
-  );
-}
-
-const ev = StyleSheet.create({
-  base:   { alignItems: 'center', gap: 14 },
-  screen: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
-  inline: { paddingVertical: 40, paddingHorizontal: 32 },
-  text:   { fontSize: 14, fontWeight: '500', color: TEXT2, textAlign: 'center', lineHeight: 22 },
-});
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function medalEmoji(rank: number): string | null {
-  if (rank === 1) return '🥇';
-  if (rank === 2) return '🥈';
-  if (rank === 3) return '🥉';
-  return null;
-}
-
-function rankColor(rank: number): string {
+/** Gold / silver / bronze rank colours — semantic decorative, not brand colours. */
+function rankColor(rank: number, muted: string): string {
   if (rank === 1) return '#FBBF24';
   if (rank === 2) return '#94A3B8';
   if (rank === 3) return '#C27938';
-  return TEXT2;
+  return muted;
 }
 
 function tieBreakerLabel(p: TieBreakerPriority): string {
@@ -168,6 +114,48 @@ function approvalLabel(s: ApprovalStatus): string {
   return 'Onaylandı';
 }
 
+function medalEmoji(rank: number): string | null {
+  if (rank === 1) return '🥇';
+  if (rank === 2) return '🥈';
+  if (rank === 3) return '🥉';
+  return null;
+}
+
+// ─── Loading placeholder ──────────────────────────────────────────────────────
+
+function TabLoadingView() {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+      <ActivityIndicator size="large" color={c.accent.primary} />
+      <Text style={{ fontSize: 14, fontWeight: '500', color: c.text.muted }}>
+        Yükleniyor…
+      </Text>
+    </View>
+  );
+}
+
+// ─── EmptyView ────────────────────────────────────────────────────────────────
+
+function EmptyView({ message, inline }: { message: string; inline?: boolean }) {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  return (
+    <View style={[
+      { alignItems: 'center', gap: 14 },
+      inline
+        ? { paddingVertical: 40, paddingHorizontal: 32 }
+        : { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
+    ]}>
+      <Ionicons name="tennisball-outline" size={inline ? 28 : 44} color={c.border.default} />
+      <Text style={{ fontSize: 14, fontWeight: '500', color: c.text.muted, textAlign: 'center', lineHeight: 22 }}>
+        {message}
+      </Text>
+    </View>
+  );
+}
+
 // ─── SegmentedControl ─────────────────────────────────────────────────────────
 
 type SegCtrlProps = {
@@ -176,7 +164,32 @@ type SegCtrlProps = {
   onSelect: (t: TournamentTab) => void;
 };
 
+function makeSegStyles(c: ColorTokens) {
+  return StyleSheet.create({
+    wrap: {
+      flexDirection: 'row',
+      backgroundColor: c.surface.card,
+      borderRadius: 12,
+      padding: 4,
+      marginHorizontal: H_PAD,
+      borderWidth: 1,
+      borderColor: c.border.default,
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: 10,
+      alignItems: 'center',
+      borderRadius: 9,
+    },
+    tabOn:    { backgroundColor: c.accent.primary },
+    label:    { fontSize: 14, fontWeight: '600', color: c.text.muted, letterSpacing: 0.2 },
+    labelOn:  { color: c.text.inverse, fontWeight: '800' },
+  });
+}
+
 function SegmentedControl({ tabs, active, onSelect }: SegCtrlProps) {
+  const { theme } = useTheme();
+  const seg = useMemo(() => makeSegStyles(theme.colors), [theme]);
   return (
     <View style={seg.wrap}>
       {tabs.map((tab) => {
@@ -196,37 +209,6 @@ function SegmentedControl({ tabs, active, onSelect }: SegCtrlProps) {
   );
 }
 
-const seg = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row',
-    backgroundColor: CARD,
-    borderRadius: 12,
-    padding: 4,
-    marginHorizontal: H_PAD,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 9,
-  },
-  tabOn: {
-    backgroundColor: ACTIVE_TAB,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: TEXT2,
-    letterSpacing: 0.2,
-  },
-  labelOn: {
-    color: ACTIVE_TEXT,
-    fontWeight: '800',
-  },
-});
-
 // ─── TournamentBanner ─────────────────────────────────────────────────────────
 
 type BannerProps = {
@@ -237,7 +219,39 @@ type BannerProps = {
   prize: string;
 };
 
+function makeBannerStyles(c: ColorTokens) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: c.surface.raised,
+      borderRadius: CARD_R,
+      padding: 18,
+      gap: 14,
+      borderWidth: 1,
+      borderColor: c.border.default,
+    },
+    topRow:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+    name:        { fontSize: 20, fontWeight: '800', color: c.text.primary, letterSpacing: -0.4 },
+    season:      { fontSize: 13, fontWeight: '500', color: c.text.muted },
+    formatBadge: {
+      backgroundColor: c.accent.primary + '1E',
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderWidth: 1,
+      borderColor: c.accent.primary + '47',
+    },
+    formatText:  { fontSize: 12, fontWeight: '700', color: c.accent.primary },
+    statsRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    stat:        { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    statText:    { fontSize: 12, fontWeight: '500', color: c.text.muted },
+    dot:         { width: 1, height: 12, backgroundColor: c.border.default },
+  });
+}
+
 function TournamentBanner({ name, season, participants, format, prize }: BannerProps) {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  const ban = useMemo(() => makeBannerStyles(c), [theme]);
   return (
     <View style={ban.card}>
       <View style={ban.topRow}>
@@ -251,61 +265,55 @@ function TournamentBanner({ name, season, participants, format, prize }: BannerP
       </View>
       <View style={ban.statsRow}>
         <View style={ban.stat}>
-          <Ionicons name="people-outline" size={13} color={TEXT2} />
+          <Ionicons name="people-outline" size={13} color={c.text.muted} />
           <Text style={ban.statText}>{participants} Oyuncu</Text>
         </View>
         <View style={ban.dot} />
         <View style={ban.stat}>
-          <Ionicons name="calendar-outline" size={13} color={TEXT2} />
+          <Ionicons name="calendar-outline" size={13} color={c.text.muted} />
           <Text style={ban.statText}>Haz – Tem 2026</Text>
         </View>
         <View style={ban.dot} />
         <View style={ban.stat}>
-          <Ionicons name="trophy-outline" size={13} color={AMBER} />
-          <Text style={[ban.statText, { color: AMBER }]}>{prize}</Text>
+          <Ionicons name="trophy-outline" size={13} color={c.status.warning} />
+          <Text style={[ban.statText, { color: c.status.warning }]}>{prize}</Text>
         </View>
       </View>
     </View>
   );
 }
 
-const ban = StyleSheet.create({
-  card: {
-    backgroundColor: CARD_RAISED,
-    borderRadius: CARD_R,
-    padding: 18,
-    gap: 14,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  name:   { fontSize: 20, fontWeight: '800', color: TEXT1, letterSpacing: -0.4 },
-  season: { fontSize: 13, fontWeight: '500', color: TEXT2 },
-  formatBadge: {
-    backgroundColor: 'rgba(190,242,100,0.12)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(190,242,100,0.28)',
-  },
-  formatText: { fontSize: 12, fontWeight: '700', color: ACTIVE_TAB },
-  statsRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stat:       { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  statText:   { fontSize: 12, fontWeight: '500', color: TEXT2 },
-  dot:        { width: 1, height: 12, backgroundColor: BORDER },
-});
-
 // ─── LigTab ───────────────────────────────────────────────────────────────────
 
 type LigTabProps = {
   bottomPad: number;
-  /** Live tournaments fetched from Firestore for this tab. */
   tournaments: Tournament[];
   isLoading: boolean;
 };
 
+function makeLigStyles(c: ColorTokens) {
+  return StyleSheet.create({
+    section:      { gap: 10, paddingHorizontal: H_PAD },
+    sectionTitle: { fontSize: 11, fontWeight: '800', color: c.text.muted, textTransform: 'uppercase', letterSpacing: 1 },
+    tableEmpty: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 36,
+      gap: 10,
+      backgroundColor: c.surface.card,
+      borderRadius: CARD_R,
+      borderWidth: 1,
+      borderColor: c.border.default,
+    },
+    emptyText: { fontSize: 13, fontWeight: '500', color: c.text.muted },
+  });
+}
+
 function LigTab({ bottomPad, tournaments, isLoading }: LigTabProps) {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  const lig = useMemo(() => makeLigStyles(c), [theme]);
+
   if (isLoading) return <TabLoadingView />;
 
   const t = tournaments[0] ?? null;
@@ -338,7 +346,7 @@ function LigTab({ bottomPad, tournaments, isLoading }: LigTabProps) {
       <View style={lig.section}>
         <Text style={lig.sectionTitle}>Grup Sıralaması</Text>
         <View style={lig.tableEmpty}>
-          <Ionicons name="stats-chart-outline" size={28} color={BORDER} />
+          <Ionicons name="stats-chart-outline" size={28} color={c.border.default} />
           <Text style={lig.emptyText}>Sıralama verileri henüz oluşmadı</Text>
         </View>
       </View>
@@ -346,27 +354,45 @@ function LigTab({ bottomPad, tournaments, isLoading }: LigTabProps) {
   );
 }
 
-const lig = StyleSheet.create({
-  section:      { gap: 10, paddingHorizontal: H_PAD },
-  sectionTitle: { fontSize: 11, fontWeight: '800', color: TEXT2, textTransform: 'uppercase', letterSpacing: 1 },
-  tableEmpty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 36,
-    gap: 10,
-    backgroundColor: CARD,
-    borderRadius: CARD_R,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  emptyText: { fontSize: 13, fontWeight: '500', color: TEXT2 },
-});
-
 // ─── DefiTab ──────────────────────────────────────────────────────────────────
 
 type DefiTabProps = { bottomPad: number };
 
+function makeDefiStyles(c: ColorTokens) {
+  return StyleSheet.create({
+    hintCard: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      backgroundColor: c.accent.primary + '12',
+      borderRadius: 12,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: c.accent.primary + '2E',
+    },
+    hintText:    { flex: 1, fontSize: 13, fontWeight: '500', color: c.text.muted, lineHeight: 20 },
+    hintBold:    { color: c.accent.primary, fontWeight: '700' },
+    section:     { gap: 10 },
+    sectionTitle: { fontSize: 11, fontWeight: '800', color: c.text.muted, textTransform: 'uppercase', letterSpacing: 1 },
+    challengeBtn: {
+      height: 52,
+      backgroundColor: c.accent.primary,
+      borderRadius: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginBottom: 4,
+    },
+    challengeBtnText: { fontSize: 15, fontWeight: '800', color: c.text.inverse },
+  });
+}
+
 function DefiTab({ bottomPad }: DefiTabProps) {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  const dfi = useMemo(() => makeDefiStyles(c), [theme]);
+
   return (
     <ScrollView
       style={{ flex: 1 }}
@@ -375,7 +401,7 @@ function DefiTab({ bottomPad }: DefiTabProps) {
     >
       {/* Power point rule hint */}
       <View style={dfi.hintCard}>
-        <Ionicons name="flash" size={15} color={ACTIVE_TAB} />
+        <Ionicons name="flash" size={15} color={c.accent.primary} />
         <Text style={dfi.hintText}>
           Defi galibine rakibinin{' '}
           <Text style={dfi.hintBold}>güç puanı</Text>{' '}
@@ -401,40 +427,12 @@ function DefiTab({ bottomPad }: DefiTabProps) {
           Alert.alert('Meydan Oku', 'Rakip seçimi özelliği yakında aktif olacak.');
         }}
       >
-        <Ionicons name="flash" size={18} color={ACTIVE_TEXT} />
+        <Ionicons name="flash" size={18} color={c.text.inverse} />
         <Text style={dfi.challengeBtnText}>Meydan Oku</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
-
-const dfi = StyleSheet.create({
-  hintCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    backgroundColor: 'rgba(190,242,100,0.07)',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(190,242,100,0.18)',
-  },
-  hintText:    { flex: 1, fontSize: 13, fontWeight: '500', color: TEXT2, lineHeight: 20 },
-  hintBold:    { color: ACTIVE_TAB, fontWeight: '700' },
-  section:     { gap: 10 },
-  sectionTitle: { fontSize: 11, fontWeight: '800', color: TEXT2, textTransform: 'uppercase', letterSpacing: 1 },
-  challengeBtn: {
-    height: 52,
-    backgroundColor: ACTIVE_TAB,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  challengeBtnText: { fontSize: 15, fontWeight: '800', color: ACTIVE_TEXT },
-});
 
 // ─── OrganizerSettingsCard ────────────────────────────────────────────────────
 
@@ -447,6 +445,19 @@ type OrgSettingsProps = {
   entryFee:       number;
 };
 
+function makeOsgStyles(c: ColorTokens) {
+  return StyleSheet.create({
+    card:     { backgroundColor: c.surface.card, borderRadius: CARD_R, padding: 16, borderWidth: 1, borderColor: c.border.default },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+    title:    { fontSize: 11, fontWeight: '800', color: c.text.primary, textTransform: 'uppercase', letterSpacing: 0.7 },
+    row:      { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingVertical: 11, gap: 12 },
+    rDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border.default },
+    rowLeft:  { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 108 },
+    rowLabel: { fontSize: 12, fontWeight: '600', color: c.text.muted },
+    rowValue: { flex: 1, fontSize: 12, fontWeight: '600', color: c.text.primary, textAlign: 'right', lineHeight: 18 },
+  });
+}
+
 function OrganizerSettingsCard({
   format,
   tierPoints,
@@ -455,6 +466,10 @@ function OrganizerSettingsCard({
   autoUpdate,
   entryFee,
 }: OrgSettingsProps) {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  const osg = useMemo(() => makeOsgStyles(c), [theme]);
+
   const tierSummary = `#1: ${tierPoints.rank1}p · #2–5: ${tierPoints.rank2to5}p · #6–10: ${tierPoints.rank6to10}p · Diğer: ${tierPoints.rest}p`;
   const updateLabel = `${updateInterval === 'weekly' ? 'Haftalık' : 'Aylık'} · ${autoUpdate ? 'Otomatik' : 'Manuel'}`;
 
@@ -469,13 +484,13 @@ function OrganizerSettingsCard({
   return (
     <View style={osg.card}>
       <View style={osg.titleRow}>
-        <Ionicons name="settings-outline" size={14} color={ACTIVE_TAB} />
+        <Ionicons name="settings-outline" size={14} color={c.accent.primary} />
         <Text style={osg.title}>Organizatör Ayarları</Text>
       </View>
       {rows.map((row, idx) => (
         <View key={row.label} style={[osg.row, idx < rows.length - 1 && osg.rDivider]}>
           <View style={osg.rowLeft}>
-            <Ionicons name={row.icon} size={12} color={TEXT2} />
+            <Ionicons name={row.icon} size={12} color={c.text.muted} />
             <Text style={osg.rowLabel}>{row.label}</Text>
           </View>
           <Text style={osg.rowValue} numberOfLines={2}>{row.value}</Text>
@@ -485,17 +500,6 @@ function OrganizerSettingsCard({
   );
 }
 
-const osg = StyleSheet.create({
-  card: { backgroundColor: CARD, borderRadius: CARD_R, padding: 16, borderWidth: 1, borderColor: BORDER },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  title:    { fontSize: 11, fontWeight: '800', color: TEXT1, textTransform: 'uppercase', letterSpacing: 0.7 },
-  row:      { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingVertical: 11, gap: 12 },
-  rDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BORDER },
-  rowLeft:  { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 108 },
-  rowLabel: { fontSize: 12, fontWeight: '600', color: TEXT2 },
-  rowValue: { flex: 1, fontSize: 12, fontWeight: '600', color: TEXT1, textAlign: 'right', lineHeight: 18 },
-});
-
 // ─── ApprovalCard ─────────────────────────────────────────────────────────────
 
 type ApprovalCardProps = {
@@ -504,18 +508,49 @@ type ApprovalCardProps = {
   onReject: (id: string) => void;
 };
 
+function makeApcStyles(c: ColorTokens) {
+  return StyleSheet.create({
+    card:        { backgroundColor: c.surface.card, borderRadius: CARD_R, padding: 16, borderWidth: 1, borderColor: c.border.default, gap: 0 },
+    headRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+    headLeft:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    dot:         { width: 8, height: 8, borderRadius: 4, backgroundColor: c.text.muted },
+    headTitle:   { fontSize: 11, fontWeight: '800', color: c.text.primary, textTransform: 'uppercase', letterSpacing: 0.7 },
+    // amber chip — dark text is needed on warning/amber backgrounds in both modes
+    countChip:   { backgroundColor: c.status.warning, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, minWidth: 24, alignItems: 'center' },
+    countText:   { fontSize: 11, fontWeight: '800', color: '#0f172a' },
+    emptyRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+    emptyText:   { fontSize: 13, fontWeight: '600', color: c.text.muted },
+    item:        { paddingVertical: 14, gap: 8 },
+    iDivider:    { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border.default },
+    itemTop:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+    matchLabel:  { flex: 1, fontSize: 14, fontWeight: '700', color: c.text.primary },
+    scorePill:   { backgroundColor: c.accent.primary + '1A', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: c.accent.primary + '38' },
+    scorePillText: { fontSize: 12, fontWeight: '700', color: c.accent.primary },
+    statusText:  { fontSize: 11, fontWeight: '500', color: c.text.muted },
+    btnRow:      { flexDirection: 'row', gap: 8 },
+    btn:         { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 10 },
+    approveBtn:  { backgroundColor: c.accent.primary },
+    approveText: { fontSize: 13, fontWeight: '700', color: c.text.inverse },
+    rejectBtn:   { backgroundColor: c.status.danger + '1A', borderWidth: 1, borderColor: c.status.danger + '40' },
+    rejectText:  { fontSize: 13, fontWeight: '700', color: c.status.danger },
+  });
+}
+
 function ApprovalCard({ approvals, onApprove, onReject }: ApprovalCardProps) {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  const apc = useMemo(() => makeApcStyles(c), [theme]);
   const pending = approvals.filter((a) => a.status !== 'approved');
 
   return (
     <View style={apc.card}>
       <View style={apc.headRow}>
         <View style={apc.headLeft}>
-          <View style={[apc.dot, pending.length > 0 && { backgroundColor: AMBER }]} />
+          <View style={[apc.dot, pending.length > 0 && { backgroundColor: c.status.warning }]} />
           <Text style={apc.headTitle}>Sonuç Onayları</Text>
         </View>
-        <View style={[apc.countChip, pending.length === 0 && { backgroundColor: ACCENT + '33' }]}>
-          <Text style={[apc.countText, pending.length === 0 && { color: ACCENT }]}>
+        <View style={[apc.countChip, pending.length === 0 && { backgroundColor: c.status.success + '33' }]}>
+          <Text style={[apc.countText, pending.length === 0 && { color: c.status.success }]}>
             {pending.length === 0 ? '✓' : pending.length}
           </Text>
         </View>
@@ -523,7 +558,7 @@ function ApprovalCard({ approvals, onApprove, onReject }: ApprovalCardProps) {
 
       {pending.length === 0 ? (
         <View style={apc.emptyRow}>
-          <Ionicons name="checkmark-done-circle" size={18} color={ACCENT} />
+          <Ionicons name="checkmark-done-circle" size={18} color={c.status.success} />
           <Text style={apc.emptyText}>Bekleyen onay bulunmuyor</Text>
         </View>
       ) : (
@@ -531,7 +566,7 @@ function ApprovalCard({ approvals, onApprove, onReject }: ApprovalCardProps) {
           <View key={a.id} style={[apc.item, idx < pending.length - 1 && apc.iDivider]}>
             <View style={apc.itemTop}>
               <Text style={apc.matchLabel} numberOfLines={1}>
-                {a.player1} <Text style={{ color: TEXT2, fontWeight: '500' }}>vs</Text> {a.player2}
+                {a.player1} <Text style={{ color: c.text.muted, fontWeight: '500' }}>vs</Text> {a.player2}
               </Text>
               <View style={apc.scorePill}>
                 <Text style={apc.scorePillText}>{a.score}</Text>
@@ -544,7 +579,7 @@ function ApprovalCard({ approvals, onApprove, onReject }: ApprovalCardProps) {
                 style={[apc.btn, apc.approveBtn]}
                 onPress={() => onApprove(a.id)}
               >
-                <Ionicons name="checkmark" size={13} color={ACTIVE_TEXT} />
+                <Ionicons name="checkmark" size={13} color={c.text.inverse} />
                 <Text style={apc.approveText}>Onayla</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -552,7 +587,7 @@ function ApprovalCard({ approvals, onApprove, onReject }: ApprovalCardProps) {
                 style={[apc.btn, apc.rejectBtn]}
                 onPress={() => onReject(a.id)}
               >
-                <Ionicons name="close" size={13} color={RED} />
+                <Ionicons name="close" size={13} color={c.status.danger} />
                 <Text style={apc.rejectText}>Reddet</Text>
               </TouchableOpacity>
             </View>
@@ -563,34 +598,41 @@ function ApprovalCard({ approvals, onApprove, onReject }: ApprovalCardProps) {
   );
 }
 
-const apc = StyleSheet.create({
-  card:        { backgroundColor: CARD, borderRadius: CARD_R, padding: 16, borderWidth: 1, borderColor: BORDER, gap: 0 },
-  headRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  headLeft:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dot:         { width: 8, height: 8, borderRadius: 4, backgroundColor: TEXT2 },
-  headTitle:   { fontSize: 11, fontWeight: '800', color: TEXT1, textTransform: 'uppercase', letterSpacing: 0.7 },
-  countChip:   { backgroundColor: AMBER, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, minWidth: 24, alignItems: 'center' },
-  countText:   { fontSize: 11, fontWeight: '800', color: ACTIVE_TEXT },
-  emptyRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
-  emptyText:   { fontSize: 13, fontWeight: '600', color: TEXT2 },
-  item:        { paddingVertical: 14, gap: 8 },
-  iDivider:    { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BORDER },
-  itemTop:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  matchLabel:  { flex: 1, fontSize: 14, fontWeight: '700', color: TEXT1 },
-  scorePill:   { backgroundColor: 'rgba(190,242,100,0.1)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: 'rgba(190,242,100,0.22)' },
-  scorePillText: { fontSize: 12, fontWeight: '700', color: ACTIVE_TAB },
-  statusText:  { fontSize: 11, fontWeight: '500', color: TEXT2 },
-  btnRow:      { flexDirection: 'row', gap: 8 },
-  btn:         { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 10 },
-  approveBtn:  { backgroundColor: ACTIVE_TAB },
-  approveText: { fontSize: 13, fontWeight: '700', color: ACTIVE_TEXT },
-  rejectBtn:   { backgroundColor: 'rgba(239,68,68,0.1)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)' },
-  rejectText:  { fontSize: 13, fontWeight: '700', color: RED },
-});
-
 // ─── Leaderboard rows ─────────────────────────────────────────────────────────
 
+function makeLbdStyles(c: ColorTokens, isDark: boolean) {
+  return StyleSheet.create({
+    head: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: c.background.secondary,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border.default,
+    },
+    row:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 13, backgroundColor: c.surface.card },
+    rowAlt:   { backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : c.background.secondary },
+    rowFirst: { backgroundColor: c.accent.primary + '0F' },
+    rowLast:  {},
+    rDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border.default },
+    rankWrap: { width: 36, alignItems: 'center', justifyContent: 'center' },
+    medal:    { fontSize: 16 },
+    colRank:  { width: 36, textAlign: 'center' },
+    colName:  { flex: 1, marginHorizontal: 4 },
+    colNum:   { width: 28, textAlign: 'center' },
+    colPts:   { width: 58, textAlign: 'center' },
+    cell:     { fontSize: 13, fontWeight: '500', color: c.text.muted },
+    nameText: { fontSize: 13, fontWeight: '700', color: c.text.primary },
+    ptsText:  { fontWeight: '800', color: c.accent.primary },
+  });
+}
+
 function LeaderboardHead() {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  const isDark = theme.colorScheme === 'dark';
+  const lbd = useMemo(() => makeLbdStyles(c, isDark), [theme]);
   return (
     <View style={lbd.head}>
       <Text style={[lbd.cell, lbd.colRank]}>#</Text>
@@ -606,7 +648,12 @@ function LeaderboardHead() {
 type LeaderboardRowProps = { item: CustomLeaderboardEntry; index: number; isLast: boolean };
 
 function LeaderboardRow({ item, index, isLast }: LeaderboardRowProps) {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  const isDark = theme.colorScheme === 'dark';
+  const lbd = useMemo(() => makeLbdStyles(c, isDark), [theme]);
   const medal = medalEmoji(item.rank);
+
   return (
     <View style={[
       lbd.row,
@@ -619,43 +666,17 @@ function LeaderboardRow({ item, index, isLast }: LeaderboardRowProps) {
         {medal ? (
           <Text style={lbd.medal}>{medal}</Text>
         ) : (
-          <Text style={[lbd.cell, { color: rankColor(item.rank) }]}>{item.rank}</Text>
+          <Text style={[lbd.cell, { color: rankColor(item.rank, c.text.muted) }]}>{item.rank}</Text>
         )}
       </View>
       <Text style={[lbd.colName, lbd.nameText]} numberOfLines={1}>{item.name}</Text>
       <Text style={[lbd.cell, lbd.colNum]}>{item.played}</Text>
-      <Text style={[lbd.cell, lbd.colNum, { color: ACCENT }]}>{item.wins}</Text>
-      <Text style={[lbd.cell, lbd.colNum, { color: RED }]}>{item.losses}</Text>
+      <Text style={[lbd.cell, lbd.colNum, { color: c.status.success }]}>{item.wins}</Text>
+      <Text style={[lbd.cell, lbd.colNum, { color: c.status.danger }]}>{item.losses}</Text>
       <Text style={[lbd.cell, lbd.colPts, lbd.ptsText]}>{item.points}</Text>
     </View>
   );
 }
-
-const lbd = StyleSheet.create({
-  head: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(15,23,42,0.8)',
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
-  row:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 13, backgroundColor: CARD },
-  rowAlt:   { backgroundColor: 'rgba(255,255,255,0.018)' },
-  rowFirst: { backgroundColor: 'rgba(190,242,100,0.06)' },
-  rowLast:  {},
-  rDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BORDER },
-  rankWrap: { width: 36, alignItems: 'center', justifyContent: 'center' },
-  medal:    { fontSize: 16 },
-  colRank:  { width: 36, textAlign: 'center' },
-  colName:  { flex: 1, marginHorizontal: 4 },
-  colNum:   { width: 28, textAlign: 'center' },
-  colPts:   { width: 58, textAlign: 'center' },
-  cell:     { fontSize: 13, fontWeight: '500', color: TEXT2 },
-  nameText: { fontSize: 13, fontWeight: '700', color: TEXT1 },
-  ptsText:  { fontWeight: '800', color: ACTIVE_TAB },
-});
 
 // ─── OzelTab ──────────────────────────────────────────────────────────────────
 
@@ -665,27 +686,86 @@ type OzelTabProps = {
   onReject:          (id: string) => void;
   bottomPad:         number;
   isLoading:         boolean;
-  /** True when the current user is an approved participant of this tournament. */
   isRegistered:      boolean;
-  /** True when the logged-in user has the 'organizer' role. */
   isOrganizer:       boolean;
-  /** Live Firestore tournament document; null while loading or if none found. */
   tournament:        Tournament | null;
-  /** Pre-mapped leaderboard rows from real Firebase data. */
   leaderboardData:   CustomLeaderboardEntry[];
-  /** Opens the score-submission bottom sheet. */
   onOpenScoreModal:  () => void;
-  /** Triggers a manual standings refresh via the Cloud Function. */
   onRefreshStandings: () => void;
-  /** True while the standings refresh request is in-flight. */
   isRefreshing:      boolean;
 };
+
+function makeOztStyles(c: ColorTokens) {
+  return StyleSheet.create({
+    header:      { gap: 20, paddingHorizontal: H_PAD },
+    section:     { gap: 10 },
+    sectionTitle: { fontSize: 11, fontWeight: '800', color: c.text.muted, textTransform: 'uppercase', letterSpacing: 1 },
+    scoreBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      height: 46,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.accent.primary + '47',
+      backgroundColor: c.accent.primary + '12',
+    },
+    scoreBtnText:   { fontSize: 14, fontWeight: '700', color: c.accent.primary },
+    refreshBtn: {
+      flexDirection:   'row',
+      alignItems:      'center',
+      justifyContent:  'center',
+      gap:             8,
+      height:          42,
+      borderRadius:    12,
+      borderWidth:     1,
+      borderColor:     c.accent.primary + '59',
+      backgroundColor: c.accent.primary + '0D',
+    },
+    refreshBtnPending: { opacity: 0.5 },
+    refreshBtnText:    { fontSize: 13, fontWeight: '700', color: c.accent.primary },
+    tableTopCap: {
+      marginHorizontal: H_PAD,
+      backgroundColor: c.surface.card,
+      borderTopLeftRadius: CARD_R,
+      borderTopRightRadius: CARD_R,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderBottomWidth: 0,
+      borderColor: c.border.default,
+    },
+    rowWrap: {
+      marginHorizontal: H_PAD,
+      borderLeftWidth: 1,
+      borderRightWidth: 1,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border.default,
+    },
+    tableBottomCap: {
+      marginHorizontal: H_PAD,
+      height: CARD_R,
+      backgroundColor: c.surface.card,
+      borderBottomLeftRadius: CARD_R,
+      borderBottomRightRadius: CARD_R,
+      borderLeftWidth: 1,
+      borderRightWidth: 1,
+      borderBottomWidth: 1,
+      borderColor: c.border.default,
+      marginTop: -StyleSheet.hairlineWidth,
+    },
+  });
+}
 
 function OzelTab({
   approvals, onApprove, onReject, bottomPad, isLoading,
   isRegistered, isOrganizer, tournament, leaderboardData,
   onOpenScoreModal, onRefreshStandings, isRefreshing,
 }: OzelTabProps) {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  const ozt = useMemo(() => makeOztStyles(c), [theme]);
+
   if (isLoading) return <TabLoadingView />;
 
   if (!tournament) {
@@ -696,13 +776,13 @@ function OzelTab({
 
   const bannerSeason = tournament.status === 'active' ? 'Özel Turnuva · Devam Ediyor' : 'Özel Turnuva · Yakında';
   const bannerPrize  = tournament.entryFee > 0 ? `₺${tournament.entryFee} Katılım` : 'Ücretsiz Katılım';
-  const tierPoints = tournament.rules?.tierPoints ?? { 
-    rank1: 0, 
-    rank2to5: 0, 
-    rank6to10: 0, 
-    rest: 0 
+  const tierPoints = tournament.rules?.tierPoints ?? {
+    rank1: 0,
+    rank2to5: 0,
+    rank6to10: 0,
+    rest: 0,
   };
-  const tieBreaker   = tournament.rules.tieBreaker;
+  const tieBreaker = tournament.rules.tieBreaker;
 
   const ListHeader = (
     <View style={ozt.header}>
@@ -714,19 +794,17 @@ function OzelTab({
         prize={bannerPrize}
       />
 
-      {/* Score entry CTA — visible only to approved participants */}
       {isRegistered && (
         <TouchableOpacity
           style={ozt.scoreBtn}
           activeOpacity={0.85}
           onPress={onOpenScoreModal}
         >
-          <Ionicons name="tennisball-outline" size={16} color={ACTIVE_TAB} />
+          <Ionicons name="tennisball-outline" size={16} color={c.accent.primary} />
           <Text style={ozt.scoreBtnText}>🎾 Skor Gir</Text>
         </TouchableOpacity>
       )}
 
-      {/* Puan Güncelle — only shown to organizers when autoUpdate is disabled */}
       {isOrganizer && !tournament.rules.autoUpdate && (
         <TouchableOpacity
           style={[ozt.refreshBtn, isRefreshing && ozt.refreshBtnPending]}
@@ -735,10 +813,10 @@ function OzelTab({
           onPress={onRefreshStandings}
         >
           {isRefreshing ? (
-            <ActivityIndicator size="small" color={ACTIVE_TAB} />
+            <ActivityIndicator size="small" color={c.accent.primary} />
           ) : (
             <>
-              <Ionicons name="refresh-outline" size={15} color={ACTIVE_TAB} />
+              <Ionicons name="refresh-outline" size={15} color={c.accent.primary} />
               <Text style={ozt.refreshBtnText}>Puan Güncelle</Text>
             </>
           )}
@@ -812,66 +890,6 @@ function OzelTab({
   );
 }
 
-const ozt = StyleSheet.create({
-  header:      { gap: 20, paddingHorizontal: H_PAD },
-  section:     { gap: 10 },
-  sectionTitle: { fontSize: 11, fontWeight: '800', color: TEXT2, textTransform: 'uppercase', letterSpacing: 1 },
-  scoreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    height: 46,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(190,242,100,0.28)',
-    backgroundColor: 'rgba(190,242,100,0.07)',
-  },
-  scoreBtnText: { fontSize: 14, fontWeight: '700', color: ACTIVE_TAB },
-  refreshBtn: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'center',
-    gap:             8,
-    height:          42,
-    borderRadius:    12,
-    borderWidth:     1,
-    borderColor:     'rgba(190,242,100,0.35)',
-    backgroundColor: 'rgba(190,242,100,0.05)',
-  },
-  refreshBtnPending: { opacity: 0.5 },
-  refreshBtnText:    { fontSize: 13, fontWeight: '700', color: ACTIVE_TAB },
-  tableTopCap: {
-    marginHorizontal: H_PAD,
-    backgroundColor: CARD,
-    borderTopLeftRadius: CARD_R,
-    borderTopRightRadius: CARD_R,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    borderColor: BORDER,
-  },
-  rowWrap: {
-    marginHorizontal: H_PAD,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: BORDER,
-  },
-  tableBottomCap: {
-    marginHorizontal: H_PAD,
-    height: CARD_R,
-    backgroundColor: CARD,
-    borderBottomLeftRadius: CARD_R,
-    borderBottomRightRadius: CARD_R,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: BORDER,
-    marginTop: -StyleSheet.hairlineWidth,
-  },
-});
-
 // ─── SubmitScoreModal ─────────────────────────────────────────────────────────
 
 type SetScore = { myScore: number; oppScore: number };
@@ -881,13 +899,159 @@ const INITIAL_SETS: SetScore[] = [{ myScore: 0, oppScore: 0 }];
 
 type SubmitScoreModalProps = {
   visible: boolean;
-  /** Leaderboard entries excluding the current user — used for the opponent picker. */
   availablePlayers: CustomLeaderboardEntry[];
   isSubmitting: boolean;
-  /** Called with the selected opponent ID and formatted score string (e.g. "6:4, 3:6, 6:2"). */
   onSubmit: (opponentId: string, scoreStr: string) => void;
   onClose: () => void;
 };
+
+function makeSmoStyles(c: ColorTokens, isDark: boolean) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.60)',
+      justifyContent: 'flex-end',
+    },
+    sheet: {
+      backgroundColor: c.surface.card,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: H_PAD,
+      paddingTop: 14,
+      paddingBottom: 40,
+      gap: 20,
+    },
+    handle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : c.border.default,
+      alignSelf: 'center',
+      marginBottom: 4,
+    },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: c.text.primary,
+      letterSpacing: -0.3,
+    },
+    section: { gap: 8 },
+    label: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: c.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.7,
+    },
+    pillRow:        { gap: 8, paddingVertical: 2 },
+    pill: {
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderRadius: 10,
+      backgroundColor: c.surface.raised,
+      borderWidth: 1,
+      borderColor: c.border.default,
+    },
+    pillActive: {
+      backgroundColor: c.accent.primary + '1E',
+      borderColor: c.accent.primary + '73',
+    },
+    pillText:       { fontSize: 13, fontWeight: '600', color: c.text.muted },
+    pillTextActive: { color: c.accent.primary, fontWeight: '700' },
+    emptyPill:      { fontSize: 13, fontWeight: '500', color: c.text.muted, fontStyle: 'italic' },
+    setList: { gap: 8 },
+    setRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: c.background.primary,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      borderWidth: 1,
+      borderColor: c.border.default,
+    },
+    setLabel: { fontSize: 12, fontWeight: '700', color: c.text.muted, width: 44 },
+    stepper: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+    },
+    stepBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: c.surface.raised,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepVal: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: c.text.primary,
+      minWidth: 24,
+      textAlign: 'center',
+    },
+    vsText: { fontSize: 11, fontWeight: '700', color: c.text.muted, letterSpacing: 0.5 },
+    setMgmtRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+    setMgmtBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 8,
+      backgroundColor: c.accent.primary + '12',
+      borderWidth: 1,
+      borderColor: c.accent.primary + '33',
+    },
+    setMgmtBtnDanger: {
+      backgroundColor: c.status.danger + '0F',
+      borderColor: c.status.danger + '33',
+    },
+    setMgmtText:       { fontSize: 12, fontWeight: '700', color: c.accent.primary },
+    setMgmtTextDanger: { color: c.status.danger },
+    btnRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: 4,
+    },
+    cancelBtn: {
+      paddingHorizontal: 20,
+      height: 50,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cancelText: { fontSize: 15, fontWeight: '600', color: c.text.muted },
+    submitBtn: {
+      flex: 1,
+      height: 50,
+      backgroundColor: c.accent.primary,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: c.accent.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.30,
+      shadowRadius: 8,
+      elevation: 6,
+    },
+    submitBtnPending: {
+      backgroundColor: c.accent.primary + '73',
+      shadowOpacity: 0,
+      elevation: 0,
+    },
+    submitText: { fontSize: 15, fontWeight: '800', color: c.text.inverse },
+  });
+}
 
 function SubmitScoreModal({
   visible,
@@ -896,10 +1060,14 @@ function SubmitScoreModal({
   onSubmit,
   onClose,
 }: SubmitScoreModalProps) {
+  const { theme } = useTheme();
+  const c = theme.colors;
+  const isDark = theme.colorScheme === 'dark';
+  const smo = useMemo(() => makeSmoStyles(c, isDark), [theme]);
+
   const [selectedOpponentId, setSelectedOpponentId] = useState('');
   const [sets, setSets] = useState<SetScore[]>(INITIAL_SETS);
 
-  // Reset form every time the sheet opens
   useEffect(() => {
     if (visible) {
       setSelectedOpponentId('');
@@ -907,7 +1075,6 @@ function SubmitScoreModal({
     }
   }, [visible]);
 
-  // Clamp stepper values between 0 and 7 (max tennis game score per set)
   const updateSet = useCallback((idx: number, field: keyof SetScore, delta: number) => {
     setSets((prev) =>
       prev.map((s, i) =>
@@ -942,21 +1109,18 @@ function SubmitScoreModal({
       statusBarTranslucent
     >
       <View style={smo.root}>
-        {/* Backdrop — tap to dismiss */}
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
 
         <View style={smo.sheet}>
-          {/* Handle bar */}
           <View style={smo.handle} />
 
-          {/* Title row */}
           <View style={smo.titleRow}>
             <Text style={smo.title}>Skor Gir</Text>
             <TouchableOpacity
               onPress={onClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="close" size={22} color={TEXT2} />
+              <Ionicons name="close" size={22} color={c.text.muted} />
             </TouchableOpacity>
           </View>
 
@@ -1001,14 +1165,13 @@ function SubmitScoreModal({
                 <View key={idx} style={smo.setRow}>
                   <Text style={smo.setLabel}>{idx + 1}. Set</Text>
 
-                  {/* My score stepper */}
                   <View style={smo.stepper}>
                     <TouchableOpacity
                       style={smo.stepBtn}
                       onPress={() => updateSet(idx, 'myScore', -1)}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-                      <Ionicons name="remove" size={14} color={TEXT1} />
+                      <Ionicons name="remove" size={14} color={c.text.primary} />
                     </TouchableOpacity>
                     <Text style={smo.stepVal}>{s.myScore}</Text>
                     <TouchableOpacity
@@ -1016,20 +1179,19 @@ function SubmitScoreModal({
                       onPress={() => updateSet(idx, 'myScore', 1)}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-                      <Ionicons name="add" size={14} color={TEXT1} />
+                      <Ionicons name="add" size={14} color={c.text.primary} />
                     </TouchableOpacity>
                   </View>
 
                   <Text style={smo.vsText}>vs</Text>
 
-                  {/* Opponent score stepper */}
                   <View style={smo.stepper}>
                     <TouchableOpacity
                       style={smo.stepBtn}
                       onPress={() => updateSet(idx, 'oppScore', -1)}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-                      <Ionicons name="remove" size={14} color={TEXT1} />
+                      <Ionicons name="remove" size={14} color={c.text.primary} />
                     </TouchableOpacity>
                     <Text style={smo.stepVal}>{s.oppScore}</Text>
                     <TouchableOpacity
@@ -1037,18 +1199,17 @@ function SubmitScoreModal({
                       onPress={() => updateSet(idx, 'oppScore', 1)}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-                      <Ionicons name="add" size={14} color={TEXT1} />
+                      <Ionicons name="add" size={14} color={c.text.primary} />
                     </TouchableOpacity>
                   </View>
                 </View>
               ))}
             </View>
 
-            {/* Set management row */}
             <View style={smo.setMgmtRow}>
               {sets.length < MAX_SETS && (
                 <TouchableOpacity style={smo.setMgmtBtn} onPress={addSet} activeOpacity={0.75}>
-                  <Ionicons name="add" size={13} color={ACTIVE_TAB} />
+                  <Ionicons name="add" size={13} color={c.accent.primary} />
                   <Text style={smo.setMgmtText}>+ Set Ekle</Text>
                 </TouchableOpacity>
               )}
@@ -1058,7 +1219,7 @@ function SubmitScoreModal({
                   onPress={removeLastSet}
                   activeOpacity={0.75}
                 >
-                  <Ionicons name="remove" size={13} color={RED} />
+                  <Ionicons name="remove" size={13} color={c.status.danger} />
                   <Text style={[smo.setMgmtText, smo.setMgmtTextDanger]}>Son Seti Sil</Text>
                 </TouchableOpacity>
               )}
@@ -1082,7 +1243,7 @@ function SubmitScoreModal({
               disabled={isSubmitting}
             >
               {isSubmitting ? (
-                <ActivityIndicator color={ACTIVE_TEXT} />
+                <ActivityIndicator color={c.text.inverse} />
               ) : (
                 <Text style={smo.submitText}>Gönder</Text>
               )}
@@ -1094,156 +1255,103 @@ function SubmitScoreModal({
   );
 }
 
-const smo = StyleSheet.create({
-  // ── Container ──
-  root: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.60)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: CARD,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: H_PAD,
-    paddingTop: 14,
-    paddingBottom: 40,
-    gap: 20,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignSelf: 'center',
-    marginBottom: 4,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: TEXT1,
-    letterSpacing: -0.3,
-  },
-  section: { gap: 8 },
-  label: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: TEXT2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
-  },
-  // ── Opponent pill picker ──
-  pillRow:        { gap: 8, paddingVertical: 2 },
-  pill: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: '#1a2744',
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  pillActive: {
-    backgroundColor: 'rgba(190,242,100,0.12)',
-    borderColor: 'rgba(190,242,100,0.45)',
-  },
-  pillText:       { fontSize: 13, fontWeight: '600', color: TEXT2 },
-  pillTextActive: { color: ACTIVE_TAB, fontWeight: '700' },
-  emptyPill:      { fontSize: 13, fontWeight: '500', color: TEXT2, fontStyle: 'italic' },
-  // ── Set stepper rows ──
-  setList: { gap: 8 },
-  setRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: BG,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  setLabel: { fontSize: 12, fontWeight: '700', color: TEXT2, width: 44 },
-  stepper: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  stepBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#334155',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepVal: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: TEXT1,
-    minWidth: 24,
-    textAlign: 'center',
-  },
-  vsText: { fontSize: 11, fontWeight: '700', color: TEXT2, letterSpacing: 0.5 },
-  // ── Set management ──
-  setMgmtRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  setMgmtBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: 'rgba(190,242,100,0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(190,242,100,0.20)',
-  },
-  setMgmtBtnDanger: {
-    backgroundColor: 'rgba(239,68,68,0.06)',
-    borderColor: 'rgba(239,68,68,0.20)',
-  },
-  setMgmtText:       { fontSize: 12, fontWeight: '700', color: ACTIVE_TAB },
-  setMgmtTextDanger: { color: RED },
-  // ── Action buttons ──
-  btnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 4,
-  },
-  cancelBtn: {
-    paddingHorizontal: 20,
-    height: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelText: { fontSize: 15, fontWeight: '600', color: TEXT2 },
-  submitBtn: {
-    flex: 1,
-    height: 50,
-    backgroundColor: ACTIVE_TAB,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: ACTIVE_TAB,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.30,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  submitBtnPending: {
-    backgroundColor: 'rgba(190,242,100,0.45)',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  submitText: { fontSize: 15, fontWeight: '800', color: ACTIVE_TEXT },
-});
+// ─── Main screen styles ───────────────────────────────────────────────────────
+
+function makeScrStyles(c: ColorTokens) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background.secondary,
+    },
+    topHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: H_PAD,
+      paddingTop: 6,
+      paddingBottom: 18,
+    },
+    headerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    createBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor: c.accent.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: c.accent.primary,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    screenTitle: {
+      fontSize: 28,
+      fontWeight: '800',
+      color: c.text.primary,
+      letterSpacing: -0.5,
+    },
+    screenSubtitle: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: c.text.muted,
+    },
+    livePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: c.status.success + '1A',
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: c.status.success + '38',
+    },
+    liveDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: c.status.success,
+    },
+    liveText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.status.success,
+    },
+    fab: {
+      position: 'absolute',
+      left: H_PAD,
+      right: H_PAD,
+    },
+    fabBtn: {
+      height: 56,
+      backgroundColor: c.accent.primary,
+      borderRadius: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      shadowColor: c.accent.primary,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.38,
+      shadowRadius: 12,
+      elevation: 10,
+    },
+    fabBtnPending: {
+      backgroundColor: c.accent.primary + '73',
+    },
+    fabText: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: c.text.inverse,
+      letterSpacing: 0.2,
+    },
+  });
+}
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
@@ -1251,6 +1359,9 @@ export function TournamentScreen() {
   const insets     = useSafeAreaInsets();
   const { uid, hasRole } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<TournamentStackParamList>>();
+  const { theme }  = useTheme();
+  const c          = theme.colors;
+  const scr        = useMemo(() => makeScrStyles(c), [theme]);
 
   // ── UI state ────────────────────────────────────────────────────────────────
   const [activeTab,   setActiveTab]   = useState<TournamentTab>('Lig');
@@ -1270,16 +1381,13 @@ export function TournamentScreen() {
 
   // ── Derived values ───────────────────────────────────────────────────────────
 
-  /** First tournament for the Özel tab — drives banner, settings, and leaderboard. */
   const ozelTournament = activeTab === 'Özel' ? (activeTournaments[0] ?? null) : null;
 
-  /** Live leaderboard rows ready for the FlatList. */
   const leaderboardData = useMemo<CustomLeaderboardEntry[]>(
     () => mapPlayersToLeaderboard(leaderboardPlayers),
     [leaderboardPlayers],
   );
 
-  /** Player is registered if they joined this session or exist in the approved leaderboard. */
   const isRegistered = useMemo(
     () => hasJoined || leaderboardPlayers.some((p) => p.userId === uid),
     [hasJoined, leaderboardPlayers, uid],
@@ -1325,8 +1433,6 @@ export function TournamentScreen() {
   const handleTabChange = useCallback((tab: TournamentTab) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActiveTab(tab);
-    // Reset leaderboard so stale data from the previous tab's tournament
-    // doesn't flash before the new subscription fires.
     setLeaderboardPlayers([]);
     Haptics.selectionAsync().catch(() => {});
   }, []);
@@ -1502,7 +1608,7 @@ export function TournamentScreen() {
               onPress={() => navigation.navigate('CreateTournament')}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
-              <Ionicons name="add" size={20} color="#0f172a" />
+              <Ionicons name="add" size={20} color={c.text.inverse} />
             </TouchableOpacity>
           )}
         </View>
@@ -1551,10 +1657,10 @@ export function TournamentScreen() {
             style={[scr.fabBtn, joinPending && scr.fabBtnPending]}
           >
             {joinPending ? (
-              <ActivityIndicator color={ACTIVE_TEXT} />
+              <ActivityIndicator color={c.text.inverse} />
             ) : (
               <>
-                <Ionicons name="add-circle-outline" size={20} color={ACTIVE_TEXT} />
+                <Ionicons name="add-circle-outline" size={20} color={c.text.inverse} />
                 <Text style={scr.fabText}>
                   {(ozelTournament?.entryFee ?? 0) > 0
                     ? `Öde ve Katıl  ·  ₺${ozelTournament!.entryFee}`
@@ -1577,99 +1683,3 @@ export function TournamentScreen() {
     </View>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const scr = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: BG,
-  },
-  topHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: H_PAD,
-    paddingTop: 6,
-    paddingBottom: 18,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  createBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: '#bef264',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#bef264',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  screenTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: TEXT1,
-    letterSpacing: -0.5,
-  },
-  screenSubtitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: TEXT2,
-  },
-  livePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(34,197,94,0.1)',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.22)',
-  },
-  liveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: ACCENT,
-  },
-  liveText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: ACCENT,
-  },
-  fab: {
-    position: 'absolute',
-    left: H_PAD,
-    right: H_PAD,
-  },
-  fabBtn: {
-    height: 56,
-    backgroundColor: ACTIVE_TAB,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    shadowColor: ACTIVE_TAB,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.38,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  fabBtnPending: {
-    backgroundColor: 'rgba(190,242,100,0.45)',
-  },
-  fabText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: ACTIVE_TEXT,
-    letterSpacing: 0.2,
-  },
-});

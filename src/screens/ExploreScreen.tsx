@@ -12,7 +12,7 @@ import * as Haptics from 'expo-haptics';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Image,
   ImageBackground,
@@ -30,6 +30,7 @@ import type { ExploreStackParamList } from '../navigation/types';
 import { useTheme } from '../context/ThemeContext';
 import type { Theme } from '../context/ThemeContext';
 import { fontSizes, fontWeights } from '../theme';
+import type { ColorTokens } from '../theme/tokens';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,218 @@ const HERO_IMAGE_URI =
 const slide = (delay: number) =>
   FadeInDown.delay(delay).duration(480).easing(Easing.out(Easing.cubic));
 
+// ─── Theme-aware style factory ────────────────────────────────────────────────
+// Structural styles only — all colour values are injected inline from the theme.
+// The factory accepts (c, isDark) to maintain architectural consistency.
+
+function makeStyles(_c: ColorTokens, _isDark: boolean) {
+  return StyleSheet.create({
+
+    safeArea: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingTop:    28,
+      paddingBottom: 120,
+    },
+
+    headerSection: {
+      paddingHorizontal: H_PAD,
+      marginBottom:      24,
+    },
+    greeting: {
+      fontSize:     fontSizes.sm,
+      fontWeight:   fontWeights.medium,
+      marginBottom: 6,
+      letterSpacing: 0.1,
+    },
+    headerTitle: {
+      fontSize:      fontSizes['4xl'],
+      fontWeight:    fontWeights.extrabold,
+      letterSpacing: -1.2,
+      lineHeight:    42,
+    },
+
+    filterWrapper: {
+      marginBottom: 24,
+    },
+    filtersContent: {
+      paddingHorizontal: H_PAD,
+      paddingVertical:   4,
+      gap:               8,
+    },
+    filterPill: {
+      paddingHorizontal: 18,
+      paddingVertical:   9,
+      borderRadius:      99,
+      borderWidth:       1,
+    },
+    filterPillText: {
+      fontSize:      fontSizes.sm,
+      fontWeight:    fontWeights.semibold,
+      letterSpacing: 0.1,
+    },
+
+    heroSection: {
+      paddingHorizontal: H_PAD,
+      marginBottom:      28,
+    },
+    heroCard: {
+      height:         268,
+      borderRadius:   24,
+      overflow:       'hidden',
+      justifyContent: 'flex-end',
+    },
+    heroOverlay: {
+      backgroundColor: 'rgba(15,23,42,0.60)',
+    },
+    ratingBadge: {
+      position:          'absolute',
+      top:               14,
+      right:             14,
+      backgroundColor:   'rgba(0,0,0,0.60)',
+      paddingHorizontal: 12,
+      paddingVertical:   6,
+      borderRadius:      20,
+    },
+    ratingText: {
+      fontSize:      fontSizes.xs,
+      fontWeight:    fontWeights.bold,
+      color:         '#FFFFFF',
+      letterSpacing: 0.2,
+    },
+    heroContent: {
+      padding: H_PAD,
+      gap:     6,
+    },
+    heroTitle: {
+      fontSize:      fontSizes['2xl'],
+      fontWeight:    fontWeights.extrabold,
+      color:         '#FFFFFF',
+      letterSpacing: -0.5,
+    },
+    heroSubtitle: {
+      fontSize:     fontSizes.sm,
+      fontWeight:   fontWeights.regular,
+      color:        'rgba(255,255,255,0.72)',
+      marginBottom: 8,
+    },
+    heroCta: {
+      flexDirection:     'row',
+      alignItems:        'center',
+      alignSelf:         'flex-start',
+      paddingHorizontal: 18,
+      paddingVertical:   10,
+      borderRadius:      14,
+    },
+    heroCtaText: {
+      fontSize:      fontSizes.sm,
+      fontWeight:    fontWeights.bold,
+      color:         '#FFFFFF',
+      letterSpacing: 0.1,
+    },
+
+    sectionLabelSection: {
+      paddingHorizontal: H_PAD,
+      marginBottom:      16,
+    },
+    sectionLabel: {
+      fontSize:      fontSizes.xl,
+      fontWeight:    fontWeights.extrabold,
+      letterSpacing: -0.4,
+    },
+
+    cardSection: {
+      paddingHorizontal: H_PAD,
+      marginBottom:      16,
+    },
+    card: {
+      borderRadius:  22,
+      overflow:      'hidden',
+      shadowColor:   '#000000',
+      shadowOffset:  { width: 0, height: 6 },
+      shadowOpacity: 0.22,
+      shadowRadius:  20,
+      elevation:     5,
+      borderWidth:   StyleSheet.hairlineWidth,
+    },
+
+    imageWrapper: {
+      height:   200,
+      position: 'relative',
+    },
+    clubImage: {
+      width:  '100%',
+      height: '100%',
+    },
+    imageOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.22)',
+    },
+    courtCountBadge: {
+      position:          'absolute',
+      top:               12,
+      right:             12,
+      flexDirection:     'row',
+      alignItems:        'center',
+      gap:               4,
+      backgroundColor:   'rgba(0,0,0,0.50)',
+      paddingHorizontal: 10,
+      paddingVertical:   5,
+      borderRadius:      20,
+    },
+    courtCountText: {
+      fontSize:      fontSizes.xs,
+      fontWeight:    fontWeights.bold,
+      color:         '#FFFFFF',
+      letterSpacing: 0.2,
+    },
+
+    infoArea: {
+      padding: 18,
+      gap:     8,
+    },
+    nameRow: {
+      flexDirection:  'row',
+      alignItems:     'center',
+      justifyContent: 'space-between',
+      gap:            8,
+    },
+    clubName: {
+      flex:          1,
+      fontSize:      fontSizes.lg,
+      fontWeight:    fontWeights.extrabold,
+      letterSpacing: -0.4,
+    },
+    addressRow: {
+      flexDirection: 'row',
+      alignItems:    'center',
+      gap:           4,
+    },
+    addressText: {
+      fontSize:   fontSizes.sm,
+      fontWeight: fontWeights.medium,
+      flex:       1,
+    },
+    chipsRow: {
+      flexDirection: 'row',
+      flexWrap:      'wrap',
+      gap:           6,
+      marginTop:     4,
+    },
+    chip: {
+      borderRadius:      20,
+      paddingHorizontal: 10,
+      paddingVertical:   5,
+    },
+    chipText: {
+      fontSize:      fontSizes.xs,
+      fontWeight:    fontWeights.semibold,
+      letterSpacing: 0.1,
+    },
+  });
+}
+
 // ─── Hero card ────────────────────────────────────────────────────────────────
 
 type HeroCardProps = {
@@ -56,6 +269,9 @@ type HeroCardProps = {
 };
 
 function HeroCard({ accentColor, onPress }: HeroCardProps) {
+  const { theme, colorScheme } = useTheme();
+  const S = useMemo(() => makeStyles(theme.colors, colorScheme === 'dark'), [theme, colorScheme]);
+
   return (
     <TouchableOpacity style={S.heroCard} activeOpacity={0.92} onPress={onPress}>
 
@@ -102,7 +318,9 @@ type ClubCardProps = {
 };
 
 function ClubCard({ club, courts, theme, onPress }: ClubCardProps) {
+  const { colorScheme } = useTheme();
   const c = theme.colors;
+  const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme, colorScheme]);
 
   return (
     <TouchableOpacity
@@ -160,11 +378,12 @@ function ClubCard({ club, courts, theme, onPress }: ClubCardProps) {
 
 export function ExploreScreen() {
   const navigation = useNavigation<ExploreNavProp>();
-  const { theme }  = useTheme();
+  const { theme, colorScheme } = useTheme();
 
   const [activeFilter, setActiveFilter] = useState<string>('Tümü');
 
   const c = theme.colors;
+  const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme, colorScheme]);
 
   const handleFilterPress = (filter: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -172,7 +391,7 @@ export function ExploreScreen() {
   };
 
   return (
-    <SafeAreaView style={[S.safeArea, { backgroundColor: c.background.primary }]}>
+    <SafeAreaView style={[S.safeArea, { backgroundColor: c.background.secondary }]}>
       <ScrollView
         contentContainerStyle={S.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -262,218 +481,3 @@ export function ExploreScreen() {
   );
 }
 
-// ─── Static layout styles ─────────────────────────────────────────────────────
-// Structural only — all color and spacing values are injected inline above.
-
-const S = StyleSheet.create({
-
-  safeArea: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop:    28,
-    paddingBottom: 120,
-  },
-
-  // ── Editorial header ────────────────────────────────────────────────────────
-  headerSection: {
-    paddingHorizontal: H_PAD,
-    marginBottom:      24,
-  },
-  greeting: {
-    fontSize:    fontSizes.sm,
-    fontWeight:  fontWeights.medium,
-    marginBottom: 6,
-    letterSpacing: 0.1,
-  },
-  headerTitle: {
-    fontSize:    fontSizes['4xl'],   // 36 — largest token available
-    fontWeight:  fontWeights.extrabold,
-    letterSpacing: -1.2,
-    lineHeight:  42,
-  },
-
-  // ── Filter pills ────────────────────────────────────────────────────────────
-  filterWrapper: {
-    marginBottom: 24,
-  },
-  filtersContent: {
-    paddingHorizontal: H_PAD,
-    paddingVertical:   4,          // prevents shadow/ring clipping
-    gap:               8,
-  },
-  filterPill: {
-    paddingHorizontal: 18,
-    paddingVertical:   9,
-    borderRadius:      99,
-    borderWidth:       1,
-  },
-  filterPillText: {
-    fontSize:      fontSizes.sm,
-    fontWeight:    fontWeights.semibold,
-    letterSpacing: 0.1,
-  },
-
-  // ── Hero card ───────────────────────────────────────────────────────────────
-  heroSection: {
-    paddingHorizontal: H_PAD,
-    marginBottom:      28,
-  },
-  heroCard: {
-    height:         268,
-    borderRadius:   24,
-    overflow:       'hidden',
-    justifyContent: 'flex-end',
-  },
-  heroOverlay: {
-    backgroundColor: 'rgba(15,23,42,0.60)',
-  },
-  ratingBadge: {
-    position:          'absolute',
-    top:               14,
-    right:             14,
-    backgroundColor:   'rgba(0,0,0,0.60)',
-    paddingHorizontal: 12,
-    paddingVertical:   6,
-    borderRadius:      20,
-  },
-  ratingText: {
-    fontSize:      fontSizes.xs,
-    fontWeight:    fontWeights.bold,
-    color:         '#FFFFFF',
-    letterSpacing: 0.2,
-  },
-  heroContent: {
-    padding: H_PAD,
-    gap:     6,
-  },
-  heroTitle: {
-    fontSize:      fontSizes['2xl'],
-    fontWeight:    fontWeights.extrabold,
-    color:         '#FFFFFF',
-    letterSpacing: -0.5,
-  },
-  heroSubtitle: {
-    fontSize:     fontSizes.sm,
-    fontWeight:   fontWeights.regular,
-    color:        'rgba(255,255,255,0.72)',
-    marginBottom: 8,
-  },
-  heroCta: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    alignSelf:         'flex-start',
-    paddingHorizontal: 18,
-    paddingVertical:   10,
-    borderRadius:      14,
-  },
-  heroCtaText: {
-    fontSize:      fontSizes.sm,
-    fontWeight:    fontWeights.bold,
-    color:         '#FFFFFF',
-    letterSpacing: 0.1,
-  },
-
-  // ── Section label ────────────────────────────────────────────────────────────
-  sectionLabelSection: {
-    paddingHorizontal: H_PAD,
-    marginBottom:      16,
-  },
-  sectionLabel: {
-    fontSize:      fontSizes.xl,
-    fontWeight:    fontWeights.extrabold,
-    letterSpacing: -0.4,
-  },
-
-  // ── Club card container ──────────────────────────────────────────────────────
-  cardSection: {
-    paddingHorizontal: H_PAD,
-    marginBottom:      16,
-  },
-  card: {
-    borderRadius:  22,
-    overflow:      'hidden',
-    shadowColor:   '#000000',
-    shadowOffset:  { width: 0, height: 6 },
-    shadowOpacity: 0.22,
-    shadowRadius:  20,
-    elevation:     5,
-    borderWidth:   StyleSheet.hairlineWidth,
-  },
-
-  // ── Club card — image region ─────────────────────────────────────────────────
-  imageWrapper: {
-    height:   200,
-    position: 'relative',
-  },
-  clubImage: {
-    width:  '100%',
-    height: '100%',
-  },
-  imageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-  },
-  courtCountBadge: {
-    position:          'absolute',
-    top:               12,
-    right:             12,
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               4,
-    backgroundColor:   'rgba(0,0,0,0.50)',
-    paddingHorizontal: 10,
-    paddingVertical:   5,
-    borderRadius:      20,
-  },
-  courtCountText: {
-    fontSize:      fontSizes.xs,
-    fontWeight:    fontWeights.bold,
-    color:         '#FFFFFF',
-    letterSpacing: 0.2,
-  },
-
-  // ── Club card — info region ──────────────────────────────────────────────────
-  infoArea: {
-    padding: 18,
-    gap:     8,
-  },
-  nameRow: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'space-between',
-    gap:            8,
-  },
-  clubName: {
-    flex:          1,
-    fontSize:      fontSizes.lg,
-    fontWeight:    fontWeights.extrabold,
-    letterSpacing: -0.4,
-  },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           4,
-  },
-  addressText: {
-    fontSize:   fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    flex:       1,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    flexWrap:      'wrap',
-    gap:           6,
-    marginTop:     4,
-  },
-  chip: {
-    borderRadius:      20,
-    paddingHorizontal: 10,
-    paddingVertical:   5,
-  },
-  chipText: {
-    fontSize:      fontSizes.xs,
-    fontWeight:    fontWeights.semibold,
-    letterSpacing: 0.1,
-  },
-});
