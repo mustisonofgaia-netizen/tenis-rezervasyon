@@ -241,8 +241,8 @@ function makeBannerStyles(c: ColorTokens) {
       borderColor: c.accent.primary + '47',
     },
     formatText:  { fontSize: 12, fontWeight: '700', color: c.accent.primary },
-    statsRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    stat:        { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    statsRow:    { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap', rowGap: 10 },
+    stat:        { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 },
     statText:    { fontSize: 12, fontWeight: '500', color: c.text.muted },
     dot:         { width: 1, height: 12, backgroundColor: c.border.default },
   });
