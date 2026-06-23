@@ -89,8 +89,10 @@ export const darkColors: ColorTokens = {
     warning: palette.amber500,
   },
   accent: {
-    primary:   palette.lime300,
-    secondary: palette.green500,
+    // emerald500 (#10b981) — professional, calming, high-trust on dark backgrounds.
+    // Dark slate900 text (text.inverse) achieves 7+ :1 contrast on this surface.
+    primary:   palette.emerald500,
+    secondary: palette.emerald600,
   },
 };
 

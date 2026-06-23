@@ -189,422 +189,447 @@ export function ProfileScreen() {
 
   return (
     <Screen
-      scrollable
       edges={['bottom', 'left', 'right']}
-      contentContainerStyle={{ paddingBottom: sp.xxl + sp.xxl }}
+      style={{ backgroundColor: c.background.primary }}
     >
 
-      {/* ── 1. Cover banner + Settings gear ─────────────────────────────── */}
-      <Animated.View entering={anim(0)}>
-        <View style={[S.coverBanner, { backgroundColor: bannerBg }]}>
+      {/* ══ FIXED TOP SECTION ══════════════════════════════════════════════════
+          Banner · Settings gear · Avatar · Name · Rank · CTA.
+          Never scrolls. Screen omits the 'top' edge so the banner bleeds behind
+          the status bar for a full-bleed look; insets.top is used manually
+          inside to position tappable elements below the status bar text.
+          ═══════════════════════════════════════════════════════════════════════ */}
+      <View>
+
+        {/* Cover banner — extra height absorbs the status-bar area */}
+        <View
+          style={[
+            S.coverBanner,
+            { backgroundColor: bannerBg, height: COVER_HEIGHT + insets.top },
+          ]}
+        >
+          {/* Settings gear — lives in a plain View, no animation wrapper, fully tappable */}
           <TouchableOpacity
-            style={[S.settingsBtn, { top: Math.max(insets.top, 20) + 10, right: sp.md }]}
+            style={[S.settingsBtn, { top: insets.top + sp.sm, right: sp.md }]}
             activeOpacity={0.7}
-            onPress={() => console.log('Navigate to Settings')}
+            onPress={() => navigation.navigate('Settings' as never)}
           >
             <View style={[S.settingsIconBg, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
               <Ionicons name="settings-outline" size={20} color={settingsIconColor} />
             </View>
           </TouchableOpacity>
         </View>
-      </Animated.View>
 
-      {/* ── 2. Identity — avatar overlap, name, rank pill, profile CTA ──── */}
-      <Animated.View
-        entering={anim(60)}
-        style={{
-          alignItems:        'center',
-          marginTop:         -(AVATAR_SIZE / 2),
-          paddingHorizontal: sp.lg,
-          marginBottom:      sp.lg,
-        }}
-      >
-        {/* Avatar — white border ring creates visual separation from banner */}
-        <View
-          style={[
-            S.avatarCircle,
-            {
-              backgroundColor: avatarBg,
-              borderWidth:     AVATAR_BORDER,
-              borderColor:     c.background.primary,
-              marginBottom:    sp.sm,
-              shadowColor:     '#000000',
-              shadowOffset:    { width: 0, height: 6 },
-              shadowOpacity:   isDark ? 0.40 : 0.16,
-              shadowRadius:    18,
-              elevation:       6,
-            },
-          ]}
-        >
-          {initials ? (
-            // White text on any saturated avatar color — intentional.
-            <Typography variant="h1" style={{ color: '#FFFFFF', fontSize: 36 }}>
-              {initials}
-            </Typography>
-          ) : (
-            <User size={40} color="#FFFFFF" strokeWidth={2.2} />
-          )}
-        </View>
-
-        {/* Player name */}
-        <Typography
-          variant="h2"
-          color="primary"
-          style={{ textAlign: 'center', marginBottom: sp.xs, fontWeight: fontWeights.extrabold }}
-        >
-          {displayName ?? 'Oyuncu'}
-        </Typography>
-
-        {/* Rank pill */}
-        <View
-          style={[
-            S.rankPill,
-            {
-              backgroundColor:   rank.bgColor,
-              borderColor:       rank.border,
-              paddingHorizontal: sp.md,
-              paddingVertical:   sp.xs,
-            },
-          ]}
-        >
-          <Typography
-            variant="caption"
-            style={{ color: rank.color, fontWeight: fontWeights.semibold, letterSpacing: 0.3 }}
-          >
-            {rank.emoji}{'  '}{rank.label}
-          </Typography>
-        </View>
-
-        {/* Complete profile CTA — only shown when profile is unverified */}
-        {!profile.isVerified && (
-          <TouchableOpacity
-            style={[
-              S.ctaButton,
-              {
-                backgroundColor:   ctaBgColor,
-                marginTop:         sp.md,
-                paddingVertical:   sp.sm,
-                paddingHorizontal: sp.xl,
-                shadowColor:       ctaBgColor,
-                shadowOffset:      { width: 0, height: 4 },
-                shadowOpacity:     0.24,
-                shadowRadius:      10,
-                elevation:         4,
-              },
-            ]}
-            activeOpacity={0.85}
-            onPress={handleCompleteProfile}
-          >
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={16}
-              color={c.text.inverse}
-              style={{ marginRight: sp.xs }}
-            />
-            <Typography
-              variant="body"
-              color="inverse"
-              style={{ fontWeight: fontWeights.semibold }}
-            >
-              Profili Tamamla
-            </Typography>
-          </TouchableOpacity>
-        )}
-      </Animated.View>
-
-      {/* ── 3. Stats Board ──────────────────────────────────────────────── */}
-      <Animated.View
-        entering={anim(120)}
-        style={{ paddingHorizontal: sp.lg, marginBottom: sp.lg }}
-      >
-        <Card variant="elevated" padding="none">
-          <View style={S.statRow}>
-
-            <View style={[S.statCell, { paddingVertical: sp.lg }]}>
-              <Typography
-                variant="h2"
-                color="primary"
-                style={{ fontWeight: fontWeights.extrabold, letterSpacing: -1 }}
-              >
-                {displayElo}
-              </Typography>
-              <Typography variant="caption" color="muted" style={S.statLabel}>
-                ELO
-              </Typography>
-            </View>
-
-            <View
-              style={[
-                S.statCell,
-                S.statCellDividers,
-                { paddingVertical: sp.lg, borderColor: c.border.default },
-              ]}
-            >
-              <Typography
-                variant="h2"
-                color="primary"
-                style={{ fontWeight: fontWeights.extrabold, letterSpacing: -1 }}
-              >
-                {displayWinRate}
-              </Typography>
-              <Typography variant="caption" color="muted" style={S.statLabel}>
-                GALİBİYET
-              </Typography>
-            </View>
-
-            <View style={[S.statCell, { paddingVertical: sp.lg }]}>
-              <Typography
-                variant="h2"
-                color="primary"
-                style={{ fontWeight: fontWeights.extrabold, letterSpacing: -1 }}
-              >
-                {displayMatches}
-              </Typography>
-              <Typography variant="caption" color="muted" style={S.statLabel}>
-                MAÇLAR
-              </Typography>
-            </View>
-
-          </View>
-        </Card>
-      </Animated.View>
-
-      {/* ── 4. Achievements — horizontal chip scroll ─────────────────────── */}
-      <Animated.View entering={anim(180)} style={{ marginBottom: sp.lg }}>
-        <Typography
-          variant="h3"
-          color="primary"
-          style={{ fontWeight: fontWeights.bold, marginBottom: sp.sm, paddingHorizontal: sp.lg }}
-        >
-          Başarımlar
-        </Typography>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
+        {/* Identity — avatar overlaps the bottom edge of the banner */}
+        <Animated.View
+          entering={anim(60)}
+          style={{
+            alignItems:        'center',
+            marginTop:         -(AVATAR_SIZE / 2),
             paddingHorizontal: sp.lg,
-            gap:               sp.sm,
-            paddingVertical:   sp.xs,
+            paddingBottom:     sp.lg,
           }}
         >
-          {MOCK_ACHIEVEMENTS.map((badge, i) => (
-            <Card key={i} variant="outlined" padding="sm">
-              <Typography
-                variant="caption"
-                color="primary"
-                style={{ fontWeight: fontWeights.medium }}
-              >
-                {badge}
-              </Typography>
-            </Card>
-          ))}
-        </ScrollView>
-      </Animated.View>
-
-      {/* ── 5. Recent Matches — card feed ───────────────────────────────── */}
-      <Animated.View
-        entering={anim(240)}
-        style={{ paddingHorizontal: sp.lg, marginBottom: sp.lg }}
-      >
-        <Typography
-          variant="h3"
-          color="primary"
-          style={{ fontWeight: fontWeights.bold, marginBottom: sp.sm }}
-        >
-          Son Maçlar
-        </Typography>
-
-        {MOCK_RECENT_MATCHES.map((match, idx) => (
-          <Card
-            key={match.id}
-            variant="outlined"
-            padding="md"
-            style={{ marginBottom: idx < MOCK_RECENT_MATCHES.length - 1 ? sp.sm : 0 }}
+          {/* Avatar — border ring creates visual separation from banner */}
+          <View
+            style={[
+              S.avatarCircle,
+              {
+                backgroundColor: avatarBg,
+                borderWidth:     AVATAR_BORDER,
+                borderColor:     c.background.primary,
+                marginBottom:    sp.sm,
+                shadowColor:     '#000000',
+                shadowOffset:    { width: 0, height: 6 },
+                shadowOpacity:   isDark ? 0.40 : 0.16,
+                shadowRadius:    18,
+                elevation:       6,
+              },
+            ]}
           >
-            <View style={S.matchRow}>
-              {/* Left: opponent + date */}
-              <View style={{ gap: sp.xs }}>
+            {initials ? (
+              // White text on any saturated avatar color — intentional.
+              <Typography variant="h1" style={{ color: '#FFFFFF', fontSize: 36 }}>
+                {initials}
+              </Typography>
+            ) : (
+              <User size={40} color="#FFFFFF" strokeWidth={2.2} />
+            )}
+          </View>
+
+          {/* Player name */}
+          <Typography
+            variant="h2"
+            color="primary"
+            style={{ textAlign: 'center', marginBottom: sp.xs, fontWeight: fontWeights.extrabold }}
+          >
+            {displayName ?? 'Oyuncu'}
+          </Typography>
+
+          {/* Rank pill */}
+          <View
+            style={[
+              S.rankPill,
+              {
+                backgroundColor:   rank.bgColor,
+                borderColor:       rank.border,
+                paddingHorizontal: sp.md,
+                paddingVertical:   sp.xs,
+              },
+            ]}
+          >
+            <Typography
+              variant="caption"
+              style={{ color: rank.color, fontWeight: fontWeights.semibold, letterSpacing: 0.3 }}
+            >
+              {rank.emoji}{'  '}{rank.label}
+            </Typography>
+          </View>
+
+          {/* Complete profile CTA — only shown when profile is unverified */}
+          {!profile.isVerified && (
+            <TouchableOpacity
+              style={[
+                S.ctaButton,
+                {
+                  backgroundColor:   ctaBgColor,
+                  marginTop:         sp.md,
+                  paddingVertical:   sp.sm,
+                  paddingHorizontal: sp.xl,
+                  shadowColor:       ctaBgColor,
+                  shadowOffset:      { width: 0, height: 4 },
+                  shadowOpacity:     0.24,
+                  shadowRadius:      10,
+                  elevation:         4,
+                },
+              ]}
+              activeOpacity={0.85}
+              onPress={handleCompleteProfile}
+            >
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={16}
+                color={c.text.inverse}
+                style={{ marginRight: sp.xs }}
+              />
+              <Typography
+                variant="body"
+                color="inverse"
+                style={{ fontWeight: fontWeights.semibold }}
+              >
+                Profili Tamamla
+              </Typography>
+            </TouchableOpacity>
+          )}
+        </Animated.View>
+
+      </View>
+
+      {/* ══ SCROLLABLE BOTTOM SECTION ═════════════════════════════════════════
+          Stats · Achievements · Recent Matches · Management · Organizer CTA.
+          Bounces over the Screen's dark background — zero white-flash risk.
+          ═══════════════════════════════════════════════════════════════════════ */}
+      <ScrollView
+        style={S.scrollSection}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: sp.xxl + sp.xl }}
+      >
+
+        {/* ── 3. Stats Board ──────────────────────────────────────────────── */}
+        <Animated.View
+          entering={anim(120)}
+          style={{ paddingHorizontal: sp.lg, marginBottom: sp.lg }}
+        >
+          <Card variant="elevated" padding="none">
+            <View style={S.statRow}>
+
+              <View style={[S.statCell, { paddingVertical: sp.lg }]}>
                 <Typography
-                  variant="body"
+                  variant="h2"
                   color="primary"
-                  style={{ fontWeight: fontWeights.semibold }}
+                  style={{ fontWeight: fontWeights.extrabold, letterSpacing: -1 }}
                 >
-                  vs {match.opponent}
+                  {displayElo}
                 </Typography>
-                <Typography variant="caption" color="muted">
-                  {match.date}
+                <Typography variant="caption" color="muted" style={S.statLabel}>
+                  ELO
                 </Typography>
               </View>
 
-              {/* Right: result badge + score */}
-              <View style={{ alignItems: 'flex-end', gap: sp.xs }}>
-                <View
-                  style={[
-                    S.resultBadge,
-                    { backgroundColor: match.result === 'W' ? successBadgeBg : dangerBadgeBg },
-                  ]}
+              <View
+                style={[
+                  S.statCell,
+                  S.statCellDividers,
+                  { paddingVertical: sp.lg, borderColor: c.border.default },
+                ]}
+              >
+                <Typography
+                  variant="h2"
+                  color="primary"
+                  style={{ fontWeight: fontWeights.extrabold, letterSpacing: -1 }}
                 >
-                  <Typography
-                    variant="caption"
-                    color={match.result === 'W' ? 'success' : 'danger'}
-                    style={{ fontWeight: fontWeights.extrabold, letterSpacing: 0.5 }}
-                  >
-                    {match.result === 'W' ? 'GALİP' : 'MAĞLUP'}
-                  </Typography>
-                </View>
-                <Typography variant="caption" color="muted">
-                  {match.score}
+                  {displayWinRate}
+                </Typography>
+                <Typography variant="caption" color="muted" style={S.statLabel}>
+                  GALİBİYET
                 </Typography>
               </View>
+
+              <View style={[S.statCell, { paddingVertical: sp.lg }]}>
+                <Typography
+                  variant="h2"
+                  color="primary"
+                  style={{ fontWeight: fontWeights.extrabold, letterSpacing: -1 }}
+                >
+                  {displayMatches}
+                </Typography>
+                <Typography variant="caption" color="muted" style={S.statLabel}>
+                  MAÇLAR
+                </Typography>
+              </View>
+
             </View>
           </Card>
-        ))}
-      </Animated.View>
+        </Animated.View>
 
-      {/* ── 6. Management Hub (coach / court_manager only) ──────────────── */}
-      {hasCoachOrManager && (
+        {/* ── 4. Achievements — horizontal chip scroll ─────────────────────── */}
+        <Animated.View entering={anim(180)} style={{ marginBottom: sp.lg }}>
+          <Typography
+            variant="h3"
+            color="primary"
+            style={{ fontWeight: fontWeights.bold, marginBottom: sp.sm, paddingHorizontal: sp.lg }}
+          >
+            Başarımlar
+          </Typography>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingHorizontal: sp.lg,
+              gap:               sp.sm,
+              paddingVertical:   sp.xs,
+            }}
+          >
+            {MOCK_ACHIEVEMENTS.map((badge, i) => (
+              <Card key={i} variant="outlined" padding="sm">
+                <Typography
+                  variant="caption"
+                  color="primary"
+                  style={{ fontWeight: fontWeights.medium }}
+                >
+                  {badge}
+                </Typography>
+              </Card>
+            ))}
+          </ScrollView>
+        </Animated.View>
+
+        {/* ── 5. Recent Matches — card feed ───────────────────────────────── */}
         <Animated.View
-          entering={anim(300)}
+          entering={anim(240)}
           style={{ paddingHorizontal: sp.lg, marginBottom: sp.lg }}
         >
           <Typography
-            variant="caption"
-            color="muted"
-            style={[S.sectionLabel, { marginBottom: sp.sm }]}
+            variant="h3"
+            color="primary"
+            style={{ fontWeight: fontWeights.bold, marginBottom: sp.sm }}
           >
-            YÖNETİM
+            Son Maçlar
           </Typography>
-          <Card variant="outlined" padding="none">
 
-            {hasRole('coach') && (
-              <TouchableOpacity
-                style={[
-                  S.mgmtRow,
-                  {
-                    borderLeftColor:   ROLE_ACCENTS.coach.border,
-                    backgroundColor:   isDark ? ROLE_ACCENTS.coach.rowBg.dark : ROLE_ACCENTS.coach.rowBg.light,
-                    paddingVertical:   sp.md,
-                    paddingHorizontal: sp.md,
-                  },
-                ]}
-                activeOpacity={0.75}
-                onPress={handleCoachPanel}
-              >
-                <View style={[S.rowLeft, { gap: sp.md2 }]}>
-                  <View
-                    style={[
-                      S.iconWrapper34,
-                      { backgroundColor: isDark ? ROLE_ACCENTS.coach.iconBg.dark : ROLE_ACCENTS.coach.iconBg.light },
-                    ]}
-                  >
-                    <Ionicons name="school-outline" size={17} color={ROLE_ACCENTS.coach.color} />
-                  </View>
-                  <View>
-                    <Typography variant="body" color="primary" style={S.mgmtTitle}>
-                      Antrenör Paneli
-                    </Typography>
-                    <Typography variant="caption" color="muted" style={{ marginTop: 1 }}>
-                      Özel Dersler
-                    </Typography>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={ROLE_ACCENTS.coach.color} />
-              </TouchableOpacity>
-            )}
-
-            {hasRole('court_manager') && (
-              <TouchableOpacity
-                style={[
-                  S.mgmtRow,
-                  {
-                    borderLeftColor:   ROLE_ACCENTS.courtManager.border,
-                    backgroundColor:   isDark ? ROLE_ACCENTS.courtManager.rowBg.dark : ROLE_ACCENTS.courtManager.rowBg.light,
-                    borderTopWidth:    hasRole('coach') ? StyleSheet.hairlineWidth : 0,
-                    borderTopColor:    c.border.default,
-                    paddingVertical:   sp.md,
-                    paddingHorizontal: sp.md,
-                  },
-                ]}
-                activeOpacity={0.75}
-                onPress={handleCourtManagerPanel}
-              >
-                <View style={[S.rowLeft, { gap: sp.md2 }]}>
-                  <View
-                    style={[
-                      S.iconWrapper34,
-                      { backgroundColor: isDark ? ROLE_ACCENTS.courtManager.iconBg.dark : ROLE_ACCENTS.courtManager.iconBg.light },
-                    ]}
-                  >
-                    <Ionicons name="grid-outline" size={17} color={ROLE_ACCENTS.courtManager.color} />
-                  </View>
-                  <View>
-                    <Typography variant="body" color="primary" style={S.mgmtTitle}>
-                      Tesis Yönetimi
-                    </Typography>
-                    <Typography variant="caption" color="muted" style={{ marginTop: 1 }}>
-                      Kort & Fiyatlandırma
-                    </Typography>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={ROLE_ACCENTS.courtManager.color} />
-              </TouchableOpacity>
-            )}
-
-          </Card>
-        </Animated.View>
-      )}
-
-      {/* ── 7. Organizer CTA Banner ──────────────────────────────────────── */}
-      {hasRole('organizer') && (
-        <Animated.View
-          entering={anim(320)}
-          style={{ paddingHorizontal: sp.lg }}
-        >
-          <TouchableOpacity activeOpacity={0.85} onPress={handleOrganizerPanel}>
-            {/*
-             * Card variant="elevated" gives the drop-shadow frame.
-             * style.backgroundColor overrides the surface color with the brand accent.
-             * text.inverse resolves correctly in both schemes:
-             *   light → white text on green banner
-             *   dark  → slate-900 text on lime banner
-             */}
+          {MOCK_RECENT_MATCHES.map((match, idx) => (
             <Card
-              variant="elevated"
-              padding="lg"
-              style={{ backgroundColor: c.accent.primary }}
+              key={match.id}
+              variant="outlined"
+              padding="md"
+              style={{ marginBottom: idx < MOCK_RECENT_MATCHES.length - 1 ? sp.sm : 0 }}
             >
-              <View style={S.ctaBannerRow}>
-                <View style={{ flex: 1 }}>
-                  <Typography
-                    variant="h3"
-                    style={{
-                      color:        c.text.inverse,
-                      fontWeight:   fontWeights.extrabold,
-                      marginBottom: sp.xs,
-                    }}
-                  >
-                    Organizatör Paneli
-                  </Typography>
+              <View style={S.matchRow}>
+                {/* Left: opponent + date */}
+                <View style={{ gap: sp.xs }}>
                   <Typography
                     variant="body"
-                    style={{ color: c.text.inverse, opacity: 0.85 }}
+                    color="primary"
+                    style={{ fontWeight: fontWeights.semibold }}
                   >
-                    Turnuvalarını yönet, sahaya in.
+                    vs {match.opponent}
+                  </Typography>
+                  <Typography variant="caption" color="muted">
+                    {match.date}
                   </Typography>
                 </View>
-                <View
-                  style={[
-                    S.ctaIconCircle,
-                    { marginLeft: sp.md, backgroundColor: 'rgba(0,0,0,0.15)' },
-                  ]}
-                >
-                  <Ionicons name="trophy" size={26} color={c.text.inverse} />
+
+                {/* Right: result badge + score */}
+                <View style={{ alignItems: 'flex-end', gap: sp.xs }}>
+                  <View
+                    style={[
+                      S.resultBadge,
+                      { backgroundColor: match.result === 'W' ? successBadgeBg : dangerBadgeBg },
+                    ]}
+                  >
+                    <Typography
+                      variant="caption"
+                      color={match.result === 'W' ? 'success' : 'danger'}
+                      style={{ fontWeight: fontWeights.extrabold, letterSpacing: 0.5 }}
+                    >
+                      {match.result === 'W' ? 'GALİP' : 'MAĞLUP'}
+                    </Typography>
+                  </View>
+                  <Typography variant="caption" color="muted">
+                    {match.score}
+                  </Typography>
                 </View>
               </View>
             </Card>
-          </TouchableOpacity>
+          ))}
         </Animated.View>
-      )}
+
+        {/* ── 6. Management Hub (coach / court_manager only) ──────────────── */}
+        {hasCoachOrManager && (
+          <Animated.View
+            entering={anim(300)}
+            style={{ paddingHorizontal: sp.lg, marginBottom: sp.lg }}
+          >
+            <Typography
+              variant="caption"
+              color="muted"
+              style={[S.sectionLabel, { marginBottom: sp.sm }]}
+            >
+              YÖNETİM
+            </Typography>
+            <Card variant="outlined" padding="none">
+
+              {hasRole('coach') && (
+                <TouchableOpacity
+                  style={[
+                    S.mgmtRow,
+                    {
+                      borderLeftColor:   ROLE_ACCENTS.coach.border,
+                      backgroundColor:   isDark ? ROLE_ACCENTS.coach.rowBg.dark : ROLE_ACCENTS.coach.rowBg.light,
+                      paddingVertical:   sp.md,
+                      paddingHorizontal: sp.md,
+                    },
+                  ]}
+                  activeOpacity={0.75}
+                  onPress={handleCoachPanel}
+                >
+                  <View style={[S.rowLeft, { gap: sp.md2 }]}>
+                    <View
+                      style={[
+                        S.iconWrapper34,
+                        { backgroundColor: isDark ? ROLE_ACCENTS.coach.iconBg.dark : ROLE_ACCENTS.coach.iconBg.light },
+                      ]}
+                    >
+                      <Ionicons name="school-outline" size={17} color={ROLE_ACCENTS.coach.color} />
+                    </View>
+                    <View>
+                      <Typography variant="body" color="primary" style={S.mgmtTitle}>
+                        Antrenör Paneli
+                      </Typography>
+                      <Typography variant="caption" color="muted" style={{ marginTop: 1 }}>
+                        Özel Dersler
+                      </Typography>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={ROLE_ACCENTS.coach.color} />
+                </TouchableOpacity>
+              )}
+
+              {hasRole('court_manager') && (
+                <TouchableOpacity
+                  style={[
+                    S.mgmtRow,
+                    {
+                      borderLeftColor:   ROLE_ACCENTS.courtManager.border,
+                      backgroundColor:   isDark ? ROLE_ACCENTS.courtManager.rowBg.dark : ROLE_ACCENTS.courtManager.rowBg.light,
+                      borderTopWidth:    hasRole('coach') ? StyleSheet.hairlineWidth : 0,
+                      borderTopColor:    c.border.default,
+                      paddingVertical:   sp.md,
+                      paddingHorizontal: sp.md,
+                    },
+                  ]}
+                  activeOpacity={0.75}
+                  onPress={handleCourtManagerPanel}
+                >
+                  <View style={[S.rowLeft, { gap: sp.md2 }]}>
+                    <View
+                      style={[
+                        S.iconWrapper34,
+                        { backgroundColor: isDark ? ROLE_ACCENTS.courtManager.iconBg.dark : ROLE_ACCENTS.courtManager.iconBg.light },
+                      ]}
+                    >
+                      <Ionicons name="grid-outline" size={17} color={ROLE_ACCENTS.courtManager.color} />
+                    </View>
+                    <View>
+                      <Typography variant="body" color="primary" style={S.mgmtTitle}>
+                        Tesis Yönetimi
+                      </Typography>
+                      <Typography variant="caption" color="muted" style={{ marginTop: 1 }}>
+                        Kort & Fiyatlandırma
+                      </Typography>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={ROLE_ACCENTS.courtManager.color} />
+                </TouchableOpacity>
+              )}
+
+            </Card>
+          </Animated.View>
+        )}
+
+        {/* ── 7. Organizer CTA Banner ──────────────────────────────────────── */}
+        {hasRole('organizer') && (
+          <Animated.View
+            entering={anim(320)}
+            style={{ paddingHorizontal: sp.lg }}
+          >
+            <TouchableOpacity activeOpacity={0.85} onPress={handleOrganizerPanel}>
+              {/*
+               * Card variant="elevated" gives the drop-shadow frame.
+               * style.backgroundColor overrides the surface color with the brand accent.
+               * text.inverse resolves correctly in both schemes:
+               *   light → white text on green banner
+               *   dark  → slate-900 text on lime banner
+               */}
+              <Card
+                variant="elevated"
+                padding="lg"
+                style={{ backgroundColor: c.accent.primary }}
+              >
+                <View style={S.ctaBannerRow}>
+                  <View style={{ flex: 1 }}>
+                    <Typography
+                      variant="h3"
+                      style={{
+                        color:        c.text.inverse,
+                        fontWeight:   fontWeights.extrabold,
+                        marginBottom: sp.xs,
+                      }}
+                    >
+                      Organizatör Paneli
+                    </Typography>
+                    <Typography
+                      variant="body"
+                      style={{ color: c.text.inverse, opacity: 0.85 }}
+                    >
+                      Turnuvalarını yönet, sahaya in.
+                    </Typography>
+                  </View>
+                  <View
+                    style={[
+                      S.ctaIconCircle,
+                      { marginLeft: sp.md, backgroundColor: 'rgba(0,0,0,0.15)' },
+                    ]}
+                  >
+                    <Ionicons name="trophy" size={26} color={c.text.inverse} />
+                  </View>
+                </View>
+              </Card>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
+      </ScrollView>
 
     </Screen>
   );
@@ -616,9 +641,14 @@ export function ProfileScreen() {
 
 const S = StyleSheet.create({
 
+  // ── Scrollable bottom section ────────────────────────────────────────────────
+  scrollSection: {
+    flex: 1,
+  },
+
   // ── Cover banner ────────────────────────────────────────────────────────────
+  // Height is set inline (COVER_HEIGHT + insets.top) to absorb the status bar.
   coverBanner: {
-    height:   COVER_HEIGHT,
     overflow: 'hidden',
   },
   settingsBtn: {

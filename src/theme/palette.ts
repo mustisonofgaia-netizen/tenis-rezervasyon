@@ -17,13 +17,19 @@ export const palette = {
   slate900: '#0f172a',
   slate950: '#020617',
 
+  // ── Emerald (trustworthy professional green — primary accent) ─────────────
+  emerald400: '#34d399',
+  emerald500: '#10b981',
+  emerald600: '#059669',
+  emerald700: '#047857',
+
   // ── Green ──────────────────────────────────────────────────────────────────
   green400: '#4ade80',
   green500: '#22c55e',
   green600: '#16a34a',
   green700: '#15803d',
 
-  // ── Lime (primary brand accent) ────────────────────────────────────────────
+  // ── Lime (legacy accent / light-theme secondary) ───────────────────────────
   lime300: '#bef264',
   lime400: '#a3e635',
   lime500: '#84cc16',

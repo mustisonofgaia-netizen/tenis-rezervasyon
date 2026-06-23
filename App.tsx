@@ -1,6 +1,6 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -23,6 +23,7 @@ import { ExploreScreen } from './src/screens/ExploreScreen';
 import { MatchesScreen } from './src/screens/MatchesScreen';
 import { MyBookingsScreen } from './src/screens/MyBookingsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TournamentScreen } from './src/screens/TournamentScreen';
 import { CreateTournamentScreen } from './src/screens/CreateTournamentScreen';
 import { OrganizerDashboardScreen } from './src/screens/OrganizerDashboardScreen';
@@ -147,6 +148,19 @@ function TournamentNavigator() {
   );
 }
 
+// ─── Profile stack (Profile home → Settings) ─────────────────────────────────
+
+const ProfileStack = createNativeStackNavigator();
+
+function ProfileNavigator() {
+  return (
+    <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
+      <ProfileStack.Screen name="ProfileHome" component={ProfileScreen} />
+      <ProfileStack.Screen name="Settings"    component={SettingsScreen} />
+    </ProfileStack.Navigator>
+  );
+}
+
 // ─── Root tab navigator ───────────────────────────────────────────────────────
 
 const PlayerTab = createBottomTabNavigator<RootTabParamList>();
@@ -162,7 +176,7 @@ function PlayerNavigator() {
       <PlayerTab.Screen name="MyBookings" component={MyBookingsScreen} />
       <PlayerTab.Screen name="Matches"    component={MatchesScreen} />
       <PlayerTab.Screen name="Tournament" component={TournamentNavigator} />
-      <PlayerTab.Screen name="Profile"    component={ProfileScreen} />
+      <PlayerTab.Screen name="Profile"    component={ProfileNavigator} />
     </PlayerTab.Navigator>
   );
 }
@@ -257,7 +271,9 @@ export default function App() {
         role={authState.role}
         managedClubId={authState.managedClubId}
       >
-        <NavigationContainer>
+          <NavigationContainer
+            theme={{ ...DarkTheme, colors: { ...DarkTheme.colors, background: '#0f172a' } }}
+          >
           {authState.role === 'club_admin' || authState.role === 'super_admin' ? (
             <AdminNavigator />
           ) : (

@@ -55,9 +55,12 @@ export interface ScreenProps extends ViewProps {
   /**
    * Any extra props forwarded to the inner `<ScrollView>`.
    * `contentContainerStyle` is excluded here (use the dedicated prop above).
+   * `style` is merged on top of the internal `[fill, transparent]` base styles,
+   * allowing callers to override the scroll canvas background (e.g. force
+   * `transparent` so the SafeAreaView's fixed background shows during bounce).
    * Only effective when `scrollable={true}`.
    */
-  scrollViewProps?: Omit<ScrollViewProps, 'contentContainerStyle' | 'style'>;
+  scrollViewProps?: Omit<ScrollViewProps, 'contentContainerStyle'>;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -76,14 +79,15 @@ export const Screen = memo<ScreenProps>(function Screen({
   const bgStyle: ViewStyle = { backgroundColor: theme.colors.background.primary };
 
   if (scrollable) {
+    const { style: scrollViewStyle, ...restScrollViewProps } = scrollViewProps ?? {};
     return (
       <SafeAreaView edges={edges} style={[styles.fill, bgStyle, style]} {...rest}>
         <ScrollView
-          style={[styles.fill, styles.transparent]}
+          style={[styles.fill, styles.transparent, scrollViewStyle]}
           contentContainerStyle={[styles.scrollContent, contentContainerStyle]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          {...scrollViewProps}
+          {...restScrollViewProps}
         >
           {children}
         </ScrollView>
