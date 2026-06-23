@@ -5,13 +5,13 @@ import { useNavigation } from '@react-navigation/native';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import {
   Image,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CLUBS, getCourtsByClubId } from '../config/data';
 import type { Club, ClubCourt } from '../config/data';

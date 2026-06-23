@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './src/context/AuthContext';
+import { ThemeProvider } from './src/context/ThemeContext';
 import * as Haptics from 'expo-haptics';
 import { registerForPushNotificationsAsync } from './src/services/notificationService';
 import { AdminDashboardScreen } from './src/screens/AdminDashboardScreen';
@@ -270,8 +271,10 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        {renderContent()}
-        <StatusBar style="auto" />
+        <ThemeProvider>
+          {renderContent()}
+          <StatusBar style="auto" />
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
