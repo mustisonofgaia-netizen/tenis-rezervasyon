@@ -2,16 +2,23 @@
  * ExploreScreen — Editorial club discovery feed.
  *
  * Sections (top → bottom):
- *  1. Editorial header  — personalised greeting + hero title
+ *  1. Editorial header  — weather widget · personalised greeting · hero title · search bar
  *  2. Horizontal pills  — single-select filter row
  *  3. Hero image card   — full-bleed photo, gradient, rating badge, CTA
- *  4. Club feed         — themed ClubCard list
+ *  4. Top Rated         — horizontal scroll of top-3 clubs
+ *  5. All clubs feed    — themed ClubCard vertical list
  */
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
-import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeInDown,
+  FadeOutUp,
+  FadeOut,
+  LinearTransition,
+} from 'react-native-reanimated';
 import { useMemo, useState } from 'react';
 import {
   Image,
@@ -19,6 +26,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -40,18 +48,26 @@ type ExploreNavProp = NativeStackNavigationProp<ExploreStackParamList, 'ExploreH
 
 const H_PAD = 24;
 
-const FILTERS = ['Tümü', 'Kortlar', 'Etkinlikler', 'Yakınımda'] as const;
+const FILTERS = ['Tümü', 'Toprak Kort', 'Sert Zemin', 'Kapalı Kort', 'Açık Kort'] as const;
 
-// Premium outdoor tennis court — Unsplash, free-to-use
 const HERO_IMAGE_URI =
   'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?w=800&q=80';
+
+// Stable mock distances keyed by club ID so they survive filter reorders
+const MOCK_DISTANCE_MAP: Record<string, string> = {
+  club_1: '1.2 km',
+  club_2: '2.4 km',
+  club_3: '3.7 km',
+  club_4: '5.1 km',
+  club_5: '6.8 km',
+  club_6: '8.2 km',
+};
 
 const slide = (delay: number) =>
   FadeInDown.delay(delay).duration(480).easing(Easing.out(Easing.cubic));
 
 // ─── Theme-aware style factory ────────────────────────────────────────────────
 // Structural styles only — all colour values are injected inline from the theme.
-// The factory accepts (c, isDark) to maintain architectural consistency.
 
 function makeStyles(_c: ColorTokens, _isDark: boolean) {
   return StyleSheet.create({
@@ -64,14 +80,26 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
       paddingBottom: 120,
     },
 
+    // ── Header ─────────────────────────────────────────────────────────────
     headerSection: {
       paddingHorizontal: H_PAD,
       marginBottom:      24,
     },
+    weatherRow: {
+      flexDirection: 'row',
+      alignItems:    'center',
+      gap:           6,
+      marginBottom:  15,
+    },
+    weatherText: {
+      fontSize:      fontSizes.sm,
+      fontWeight:    fontWeights.medium,
+      letterSpacing: 0.1,
+    },
     greeting: {
-      fontSize:     fontSizes.sm,
-      fontWeight:   fontWeights.medium,
-      marginBottom: 6,
+      fontSize:      fontSizes.sm,
+      fontWeight:    fontWeights.medium,
+      marginBottom:  6,
       letterSpacing: 0.1,
     },
     headerTitle: {
@@ -79,8 +107,24 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
       fontWeight:    fontWeights.extrabold,
       letterSpacing: -1.2,
       lineHeight:    42,
+      marginBottom:  18,
+    },
+    searchBar: {
+      flexDirection:     'row',
+      alignItems:        'center',
+      borderRadius:      16,
+      paddingHorizontal: 14,
+      paddingVertical:   11,
+      gap:               10,
+    },
+    searchInput: {
+      flex:       1,
+      fontSize:   fontSizes.sm,
+      fontWeight: fontWeights.medium,
+      padding:    0,
     },
 
+    // ── Filter pills ───────────────────────────────────────────────────────
     filterWrapper: {
       marginBottom: 24,
     },
@@ -101,6 +145,7 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
       letterSpacing: 0.1,
     },
 
+    // ── Hero card ──────────────────────────────────────────────────────────
     heroSection: {
       paddingHorizontal: H_PAD,
       marginBottom:      28,
@@ -160,9 +205,10 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
       letterSpacing: 0.1,
     },
 
-    sectionLabelSection: {
+    // ── Section header ─────────────────────────────────────────────────────
+    sectionHeader: {
       paddingHorizontal: H_PAD,
-      marginBottom:      16,
+      marginBottom:      14,
     },
     sectionLabel: {
       fontSize:      fontSizes.xl,
@@ -170,10 +216,26 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
       letterSpacing: -0.4,
     },
 
+    // ── Top Rated horizontal list ──────────────────────────────────────────
+    topRatedSection: {
+      marginBottom: 28,
+    },
+    horizontalListContent: {
+      paddingHorizontal: H_PAD,
+      paddingBottom:     8,
+      gap:               14,
+    },
+    horizontalCardWrapper: {
+      width: 280,
+    },
+
+    // ── Vertical club feed ─────────────────────────────────────────────────
     cardSection: {
       paddingHorizontal: H_PAD,
       marginBottom:      16,
     },
+
+    // ── ClubCard ───────────────────────────────────────────────────────────
     card: {
       borderRadius:  22,
       overflow:      'hidden',
@@ -184,7 +246,6 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
       elevation:     5,
       borderWidth:   StyleSheet.hairlineWidth,
     },
-
     imageWrapper: {
       height:   200,
       position: 'relative',
@@ -215,7 +276,6 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
       color:         '#FFFFFF',
       letterSpacing: 0.2,
     },
-
     infoArea: {
       padding: 18,
       gap:     8,
@@ -242,6 +302,10 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
       fontWeight: fontWeights.medium,
       flex:       1,
     },
+    distanceText: {
+      fontSize:   fontSizes.sm,
+      fontWeight: fontWeights.bold,
+    },
     chipsRow: {
       flexDirection: 'row',
       flexWrap:      'wrap',
@@ -257,6 +321,21 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
       fontSize:      fontSizes.xs,
       fontWeight:    fontWeights.semibold,
       letterSpacing: 0.1,
+    },
+
+    // ── Empty state ────────────────────────────────────────────────────────
+    emptyState: {
+      alignItems:        'center',
+      paddingVertical:   56,
+      paddingHorizontal: H_PAD,
+      gap:               14,
+    },
+    emptyStateText: {
+      fontSize:      fontSizes.base,
+      fontWeight:    fontWeights.semibold,
+      textAlign:     'center',
+      letterSpacing: -0.2,
+      lineHeight:    22,
     },
   });
 }
@@ -275,22 +354,18 @@ function HeroCard({ accentColor, onPress }: HeroCardProps) {
   return (
     <TouchableOpacity style={S.heroCard} activeOpacity={0.92} onPress={onPress}>
 
-      {/* Full-bleed background image */}
       <ImageBackground
         source={{ uri: HERO_IMAGE_URI }}
         style={StyleSheet.absoluteFillObject}
         resizeMode="cover"
       />
 
-      {/* Dark overlay — keeps white text legible without native gradient module */}
       <View style={[StyleSheet.absoluteFillObject, S.heroOverlay]} />
 
-      {/* Rating badge — floating top-right pill */}
       <View style={S.ratingBadge}>
         <Text style={S.ratingText}>⭐  4.8</Text>
       </View>
 
-      {/* Bottom overlay: title · subtitle · CTA */}
       <View style={S.heroContent}>
         <Text style={S.heroTitle}>Popüler Kortlar</Text>
         <Text style={S.heroSubtitle}>İstanbul'un en iyi kort seçenekleri</Text>
@@ -311,13 +386,14 @@ function HeroCard({ accentColor, onPress }: HeroCardProps) {
 // ─── Club card ────────────────────────────────────────────────────────────────
 
 type ClubCardProps = {
-  club:    Club;
-  courts:  ClubCourt[];
-  theme:   Theme;
-  onPress: () => void;
+  club:     Club;
+  courts:   ClubCourt[];
+  theme:    Theme;
+  distance: string;
+  onPress:  () => void;
 };
 
-function ClubCard({ club, courts, theme, onPress }: ClubCardProps) {
+function ClubCard({ club, courts, theme, distance, onPress }: ClubCardProps) {
   const { colorScheme } = useTheme();
   const c = theme.colors;
   const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme, colorScheme]);
@@ -356,6 +432,7 @@ function ClubCard({ club, courts, theme, onPress }: ClubCardProps) {
           <Text style={[S.addressText, { color: c.text.muted }]} numberOfLines={1}>
             {club.address}
           </Text>
+          <Text style={[S.distanceText, { color: c.accent.primary }]}>{distance}</Text>
         </View>
 
         {/* Facility chips */}
@@ -380,15 +457,36 @@ export function ExploreScreen() {
   const navigation = useNavigation<ExploreNavProp>();
   const { theme, colorScheme } = useTheme();
 
-  const [activeFilter, setActiveFilter] = useState<string>('Tümü');
+  const [searchQuery, setSearchQuery]   = useState('');
+  const [activeFilter, setActiveFilter] = useState('Tümü');
 
   const c = theme.colors;
   const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme, colorScheme]);
+
+  // True whenever the user has typed a query or selected a non-default pill
+  const isFiltering = searchQuery.trim().length > 0 || activeFilter !== 'Tümü';
 
   const handleFilterPress = (filter: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setActiveFilter(filter);
   };
+
+  // Top-rated strip is always the first 3 clubs, unaffected by filters
+  const topRatedClubs = CLUBS.slice(0, 3);
+
+  // Client-side derived list — search query + surface pill filter
+  const filteredClubs = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return CLUBS.filter((club) => {
+      const matchesSearch =
+        q === '' ||
+        club.name.toLowerCase().includes(q) ||
+        club.address.toLowerCase().includes(q);
+      const matchesSurface =
+        activeFilter === 'Tümü' || club.surfaces.includes(activeFilter);
+      return matchesSearch && matchesSurface;
+    });
+  }, [searchQuery, activeFilter]);
 
   return (
     <SafeAreaView style={[S.safeArea, { backgroundColor: c.background.secondary }]}>
@@ -399,10 +497,39 @@ export function ExploreScreen() {
 
         {/* ── 1. Editorial header ──────────────────────────────────────── */}
         <Animated.View entering={slide(0)} style={S.headerSection}>
+
+          {/* Weather widget */}
+          <View style={S.weatherRow}>
+            <Ionicons name="sunny-outline" size={14} color={c.text.muted} />
+            <Text style={[S.weatherText, { color: c.text.muted }]}>
+              24°C · Açık kortlar için harika
+            </Text>
+          </View>
+
+          {/* Personalised greeting */}
           <Text style={[S.greeting, { color: c.text.muted }]}>Merhaba, Mustafa 👋</Text>
+
+          {/* Hero title */}
           <Text style={[S.headerTitle, { color: c.text.primary }]}>
             Kortları{'\n'}Keşfet
           </Text>
+
+          {/* Search bar */}
+          <View style={[S.searchBar, { backgroundColor: c.surface.raised }]}>
+            <Ionicons name="search-outline" size={17} color={c.text.muted} />
+            <TextInput
+              style={[S.searchInput, { color: c.text.primary }]}
+              placeholder="Tesis veya semt ara..."
+              placeholderTextColor={c.text.muted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+          </View>
+
         </Animated.View>
 
         {/* ── 2. Filter pills ──────────────────────────────────────────── */}
@@ -441,43 +568,100 @@ export function ExploreScreen() {
           </ScrollView>
         </Animated.View>
 
-        {/* ── 3. Hero card ─────────────────────────────────────────────── */}
-        <Animated.View entering={slide(160)} style={S.heroSection}>
-          <HeroCard
-            accentColor={c.accent.primary}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              navigation.navigate('BookingScreen', { clubId: CLUBS[0].id });
-            }}
-          />
+        {/* ── 3 & 4. Promotional block — hidden while filtering ────────── */}
+        {!isFiltering && (
+          <>
+            {/* Hero card */}
+            <Animated.View
+              entering={slide(160)}
+              exiting={FadeOutUp.duration(250)}
+              style={S.heroSection}
+            >
+              <HeroCard
+                accentColor={c.accent.primary}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                  navigation.navigate('BookingScreen', { clubId: CLUBS[0].id });
+                }}
+              />
+            </Animated.View>
+
+            {/* Top Rated — horizontal scroll */}
+            <Animated.View
+              entering={slide(240)}
+              exiting={FadeOutUp.duration(200)}
+              style={S.topRatedSection}
+            >
+              <View style={S.sectionHeader}>
+                <Text style={[S.sectionLabel, { color: c.text.primary }]}>
+                  En Yüksek Puanlılar
+                </Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={S.horizontalListContent}
+              >
+                {topRatedClubs.map((club) => (
+                  <View key={club.id} style={S.horizontalCardWrapper}>
+                    <ClubCard
+                      club={club}
+                      courts={getCourtsByClubId(club.id)}
+                      theme={theme}
+                      distance={MOCK_DISTANCE_MAP[club.id] ?? '—'}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                        navigation.navigate('BookingScreen', { clubId: club.id });
+                      }}
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            </Animated.View>
+          </>
+        )}
+
+        {/* ── 5. All clubs — section label ─────────────────────────────── */}
+        <Animated.View
+          entering={slide(320)}
+          layout={LinearTransition.springify().mass(0.8)}
+          style={S.sectionHeader}
+        >
+          <Text style={[S.sectionLabel, { color: c.text.primary }]}>Tüm Tesisler</Text>
         </Animated.View>
 
-        {/* ── 4. Section label ─────────────────────────────────────────── */}
-        <Animated.View entering={slide(240)} style={S.sectionLabelSection}>
-          <Text style={[S.sectionLabel, { color: c.text.primary }]}>Tüm Kulüpler</Text>
-        </Animated.View>
-
-        {/* ── 5. Club feed ─────────────────────────────────────────────── */}
-        {CLUBS.map((club, index) => (
-          <Animated.View
-            key={club.id}
-            entering={slide(300 + index * 90)}
-            style={S.cardSection}
-          >
-            <ClubCard
-              club={club}
-              courts={getCourtsByClubId(club.id)}
-              theme={theme}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                navigation.navigate('BookingScreen', { clubId: club.id });
-              }}
-            />
-          </Animated.View>
-        ))}
+        {/* ── 6. Club feed (vertical) — driven by filteredClubs ─────────── */}
+        {filteredClubs.length === 0 ? (
+          <View style={S.emptyState}>
+            <Ionicons name="search-outline" size={44} color={c.text.muted} />
+            <Text style={[S.emptyStateText, { color: c.text.secondary }]}>
+              Bu kriterlere uygun{'\n'}kort bulunamadı.
+            </Text>
+          </View>
+        ) : (
+          filteredClubs.map((club, index) => (
+            <Animated.View
+              key={club.id}
+              entering={slide(380 + index * 90)}
+              exiting={FadeOut.duration(180)}
+              layout={LinearTransition.springify().mass(0.8)}
+              style={S.cardSection}
+            >
+              <ClubCard
+                club={club}
+                courts={getCourtsByClubId(club.id)}
+                theme={theme}
+                distance={MOCK_DISTANCE_MAP[club.id] ?? '—'}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  navigation.navigate('BookingScreen', { clubId: club.id });
+                }}
+              />
+            </Animated.View>
+          ))
+        )}
 
       </ScrollView>
     </SafeAreaView>
   );
 }
-
