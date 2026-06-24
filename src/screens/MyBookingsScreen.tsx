@@ -3,20 +3,18 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   FadeInDown,
-  FadeInLeft,
-  FadeInRight,
   FadeOut,
+  LinearTransition,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   RefreshControl,
   SafeAreaView,
   StyleSheet,
@@ -47,13 +45,7 @@ const DELETE_ACTION_WIDTH = SNAP_OPEN;
 const SPRING_CONFIG       = { mass: 0.2, damping: 15, stiffness: 120 } as const;
 const STAGGER_MS          = 70;
 
-/**
- * `ACCENT_JOINED` is a semantic indicator colour (blue = participant).
- * It stays fixed across light and dark mode.
- */
-const ACCENT_JOINED = '#3B82F6';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatBookingDate(dateKey: string): string {
   const [year, month, day] = dateKey.split('-').map(Number);
@@ -86,7 +78,7 @@ function makeStyles(c: ColorTokens, isDark: boolean) {
     loaderContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     listWrapper:     { flex: 1 },
 
-    // ── Static header + segmented control ──────────────────────────────────
+    // ── Static header ────────────────────────────────────────────────────────
     staticHeader: {
       paddingTop: 20,
       paddingHorizontal: 20,
@@ -101,9 +93,7 @@ function makeStyles(c: ColorTokens, isDark: boolean) {
       marginBottom: 16,
     },
 
-    // ── Segmented control ───────────────────────────────────────────────────
-    // The track uses `surface.raised` so it adapts: elevated dark (dark mode)
-    // vs. light grey (light mode). The active pill is always accent.primary.
+    // ── Segmented control ────────────────────────────────────────────────────
     segWrapper: {
       flexDirection: 'row',
       backgroundColor: c.surface.raised,
@@ -120,31 +110,29 @@ function makeStyles(c: ColorTokens, isDark: boolean) {
       borderRadius: 14,
       gap: 6,
     },
-    segTabActive:         { backgroundColor: c.accent.primary },
-    segTabText:           { fontSize: 13, fontWeight: '700', color: c.text.muted, letterSpacing: 0.1 },
-    segTabTextActive:     { color: c.text.inverse },
+    segTabActive:     { backgroundColor: c.accent.primary },
+    segTabText:       { fontSize: 13, fontWeight: '700', color: c.text.muted, letterSpacing: 0.1 },
+    segTabTextActive: { color: c.text.inverse },
     segCount: {
       minWidth: 20,
       height: 20,
       borderRadius: 10,
-      // Subtle tint on the inactive tab track.
       backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : c.border.default,
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: 5,
     },
     segCountActive: {
-      // On the accent pill: dark overlay in dark mode, light overlay in light mode.
       backgroundColor: isDark ? 'rgba(15,23,42,0.20)' : 'rgba(255,255,255,0.25)',
     },
     segCountText:       { fontSize: 11, fontWeight: '800', color: c.text.muted },
     segCountTextActive: { color: c.text.inverse },
 
-    // ── List ───────────────────────────────────────────────────────────────
+    // ── List ─────────────────────────────────────────────────────────────────
     listContent:      { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120 },
     listContentEmpty: { flexGrow: 1 },
 
-    // ── Activity type badge ─────────────────────────────────────────────────
+    // ── Activity type badge (available for external use) ─────────────────────
     typeBadge: {
       alignSelf: 'flex-start',
       borderWidth: 1,
@@ -159,22 +147,21 @@ function makeStyles(c: ColorTokens, isDark: boolean) {
       letterSpacing: 0.2,
     },
 
-    // ── Swipe row ───────────────────────────────────────────────────────────
-    swipeRow:    { marginBottom: 14 },
+    // ── Swipe row ────────────────────────────────────────────────────────────
+    swipeRow:     { marginBottom: 14 },
     deleteAction: {
       position: 'absolute', top: 0, right: 0, bottom: 0,
       width: DELETE_ACTION_WIDTH,
-      // Delete action is always red — semantic danger colour.
       backgroundColor: c.status.danger,
       borderTopRightRadius: 18, borderBottomRightRadius: 18,
       alignItems: 'center', justifyContent: 'center',
     },
     deleteActionContent: { alignItems: 'center', gap: 5 },
     deleteActionIcon:    { fontSize: 22 },
-    // Label is always white since it sits on the danger (red) surface.
+    // White is mandatory: this label always sits on the danger-red surface.
     deleteActionLabel:   { fontSize: 11, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.4 },
 
-    // ── Base card (booking, swipeable) ──────────────────────────────────────
+    // ── Booking card shell ────────────────────────────────────────────────────
     card: {
       backgroundColor: c.surface.card,
       borderRadius: 18,
@@ -182,86 +169,297 @@ function makeStyles(c: ColorTokens, isDark: boolean) {
       borderWidth: 1,
       borderColor: c.border.default,
       borderLeftWidth: 4,
-      shadowColor: '#000000',
+      shadowColor: c.text.primary,
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.05,
       shadowRadius: 12,
       elevation: 2,
     },
 
-    // ── Joined-match card ───────────────────────────────────────────────────
+    // ── TICKET SECTION (top half) ─────────────────────────────────────────────
+    ticketHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      marginBottom: 14,
+      gap: 12,
+    },
+    facilityName: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: '700',
+      color: c.text.primary,
+      lineHeight: 22,
+    },
+    badge: {
+      backgroundColor: c.status.success + '1A',
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    badgeText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.status.success,
+      letterSpacing: 0.3,
+    },
+    ticketMeta: {
+      flexDirection: 'row',
+    },
+    ticketMetaItem: {
+      flex: 1,
+      gap: 3,
+    },
+    ticketMetaDivider: {
+      width: StyleSheet.hairlineWidth,
+      backgroundColor: c.border.default,
+      marginHorizontal: 16,
+      marginVertical: 2,
+    },
+    infoLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: c.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+    },
+    infoValue: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: c.text.primary,
+    },
+
+    // ── Ticket tear separator (dashed hairline) ───────────────────────────────
+    ticketSeparator: {
+      borderTopWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: c.border.default,
+      marginVertical: 14,
+    },
+
+    // ── ACTION PANEL — STATE A: Ghost "Oyuncu Ara" CTA ───────────────────────
+    findPlayersGhost: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 9,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border.default,
+      backgroundColor: c.surface.raised,
+    },
+    findPlayersGhostLeft: {
+      gap: 1,
+    },
+    findPlayersGhostLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.accent.primary,
+    },
+    findPlayersGhostHint: {
+      fontSize: 11,
+      color: c.text.muted,
+    },
+    findPlayersGhostArrow: {
+      fontSize: 20,
+      color: c.text.muted,
+    },
+
+    // ── ACTION PANEL — STATE B: Active Match Lobby ────────────────────────────
+    matchLobbyPanel: {
+      backgroundColor: c.status.warning + '14',
+      borderRadius: 12,
+      padding: 12,
+      gap: 8,
+      borderWidth: 1,
+      borderColor: c.status.warning + '33',
+    },
+    matchLobbyHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    matchLobbyTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.status.warning,
+    },
+    matchSlotBadge: {
+      backgroundColor: c.status.warning + '22',
+      borderRadius: 99,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderWidth: 1,
+      borderColor: c.status.warning + '44',
+    },
+    matchSlotText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: c.status.warning,
+    },
+    matchLobbyCta: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: c.status.warning,
+      opacity: 0.85,
+    },
+
+    // ── Joined-match card ─────────────────────────────────────────────────────
     joinedCardWrapper: { marginBottom: 14 },
     joinedCard: {
       backgroundColor: c.surface.card,
       borderRadius: 18,
       padding: 18,
       borderWidth: 1,
-      // Blue accent border — semantic to "joined" activity type, stays blue.
-      borderColor: 'rgba(59,130,246,0.25)',
+      borderColor: c.accent.secondary + '33',
       borderLeftWidth: 4,
-      borderLeftColor: ACCENT_JOINED,
-      shadowColor: '#000000',
+      borderLeftColor: c.accent.secondary,
+      shadowColor: c.text.primary,
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.05,
       shadowRadius: 12,
       elevation: 2,
     },
 
-    // ── Shared card anatomy ─────────────────────────────────────────────────
-    cardHeader: {
-      flexDirection: 'row', alignItems: 'flex-start',
-      justifyContent: 'space-between', marginBottom: 16, gap: 12,
+    // ── Joined card: status row ───────────────────────────────────────────────
+    joinedStatusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 16,
     },
-    facilityName: { flex: 1, fontSize: 16, fontWeight: '700', color: c.text.primary, lineHeight: 22 },
-    badge: {
-      // "Onaylandı" badge — success tint.
-      backgroundColor: c.status.success + '1A',
-      borderRadius: 999,
+    joinedStatusBadge: {
+      borderRadius: 99,
       paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingVertical: 5,
     },
-    badgeFull:     { backgroundColor: c.status.warning + '1A' },
-    badgeText:     { fontSize: 12, fontWeight: '700', color: c.status.success, letterSpacing: 0.3 },
-    // "Dolu" badge text: use warning token in dark (bright amber), deep amber in light
-    // so it remains readable against the pale warning tint background.
-    badgeTextFull: { color: isDark ? c.status.warning : '#92400E' },
-    cardBody:      { gap: 12 },
-    infoBlock:     { gap: 4 },
-    infoLabel:     { fontSize: 12, fontWeight: '600', color: c.text.muted, textTransform: 'uppercase', letterSpacing: 0.6 },
-    infoValue:     { fontSize: 15, fontWeight: '600', color: c.text.primary },
+    joinedStatusOpen:     { backgroundColor: c.status.success + '1A' },
+    joinedStatusFull:     { backgroundColor: c.status.warning + '1A' },
+    joinedStatusTextOpen: { fontSize: 12, fontWeight: '700', color: c.status.success, letterSpacing: 0.3 },
+    joinedStatusTextFull: { fontSize: 12, fontWeight: '700', color: c.status.warning, letterSpacing: 0.3 },
+    joinedParticipantLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: c.accent.secondary,
+    },
 
-    // ── Card footer (CTA row) ───────────────────────────────────────────────
-    cardFooter: {
-      marginTop: 16, paddingTop: 14,
-      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border.default,
+    // ── Player slot display (socially prominent) ──────────────────────────────
+    joinedSlotSection: {
+      alignItems: 'center',
+      paddingVertical: 10,
+      gap: 8,
     },
-    findPlayersButton: {
-      // Accent tint CTA — "find players" button.
-      backgroundColor: c.accent.primary + '14',
-      borderRadius: 12, paddingVertical: 11, alignItems: 'center',
+    joinedSlotCountRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 4,
     },
-    findPlayersText:  { fontSize: 13, fontWeight: '700', color: c.accent.primary, letterSpacing: 0.2 },
-    activeMatchBadge: {
-      // "Maç Yayında" badge — warning/amber tint.
-      backgroundColor: c.status.warning + '14',
-      borderRadius: 12,
-      paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center',
-      borderWidth: 1, borderColor: c.status.warning + '33',
+    joinedSlotNumber: {
+      fontSize: 34,
+      fontWeight: '800',
+      color: c.text.primary,
+      letterSpacing: -1,
     },
-    activeMatchText:  {
-      fontSize: 13, fontWeight: '700',
-      color: isDark ? c.status.warning : '#92400E',
-      letterSpacing: 0.1,
+    joinedSlotDivider: {
+      fontSize: 20,
+      fontWeight: '500',
+      color: c.text.muted,
+      marginHorizontal: 2,
     },
-    joinedBadgeRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    // Joined badge text: always blue (semantic "participant" indicator).
-    joinedBadgeText:  { fontSize: 13, fontWeight: '600', color: ACCENT_JOINED },
-    viewDetailsHint:  { fontSize: 12, fontWeight: '600', color: ACCENT_JOINED },
+    joinedSlotTotal: {
+      fontSize: 22,
+      fontWeight: '700',
+      color: c.text.muted,
+    },
+    joinedSlotLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: c.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.7,
+    },
+    joinedDotRow: {
+      flexDirection: 'row',
+      gap: 7,
+    },
+    playerDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: c.border.default,
+    },
+    playerDotFilled: {
+      backgroundColor: c.accent.secondary,
+    },
 
-    // ── Empty state ─────────────────────────────────────────────────────────
-    emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, paddingHorizontal: 24 },
-    emptyTitle: { fontSize: 18, fontWeight: '700', color: c.text.primary, marginBottom: 8, textAlign: 'center' },
-    emptyText:  { fontSize: 14, lineHeight: 22, color: c.text.muted, textAlign: 'center' },
+    // ── Joined card: secondary info ───────────────────────────────────────────
+    joinedCourtSection: {
+      gap: 4,
+    },
+    joinedCourtName: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: c.text.primary,
+    },
+    joinedMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    joinedMetaDot: {
+      width: 3,
+      height: 3,
+      borderRadius: 1.5,
+      backgroundColor: c.text.muted,
+    },
+    joinedMetaText: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: c.text.muted,
+    },
+
+    // ── Joined card: CTA row ──────────────────────────────────────────────────
+    joinedCtaRow: {
+      marginTop: 14,
+      paddingTop: 12,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: c.border.default,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    joinedCtaLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.accent.secondary,
+    },
+    joinedCtaArrow: {
+      fontSize: 18,
+      color: c.accent.secondary,
+    },
+
+    // ── Empty state ───────────────────────────────────────────────────────────
+    emptyState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingTop: 80,
+      paddingHorizontal: 24,
+    },
+    emptyTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: c.text.primary,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    emptyText: {
+      fontSize: 14,
+      lineHeight: 22,
+      color: c.text.muted,
+      textAlign: 'center',
+    },
   });
 }
 
@@ -287,16 +485,15 @@ function TypeBadge({ kind }: { kind: ActivityKind }) {
       border: c.accent.primary + '33',
     },
     joined: {
-      // Blue is the fixed semantic colour for "participant".
       label:  '🎾 Katılımcı',
-      bg:     'rgba(59,130,246,0.08)',
-      text:   '#3B82F6',
-      border: 'rgba(59,130,246,0.25)',
+      bg:     c.accent.secondary + '14',
+      text:   c.accent.secondary,
+      border: c.accent.secondary + '33',
     },
   };
 
   const cf = configs[kind];
-  const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme]);
+  const S  = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme]);
   return (
     <View style={[S.typeBadge, { backgroundColor: cf.bg, borderColor: cf.border }]}>
       <Text style={[S.typeBadgeText, { color: cf.text }]}>{cf.label}</Text>
@@ -307,7 +504,7 @@ function TypeBadge({ kind }: { kind: ActivityKind }) {
 // ─── Swipeable booking card ───────────────────────────────────────────────────
 
 type SwipeableBookingCardProps = {
-  booking:    ConfirmedBooking;
+  booking:       ConfirmedBooking;
   onFindPlayers: (booking: ConfirmedBooking) => void;
   onViewMatch:   (match: MatchDocument) => void;
   activeMatch:   MatchDocument | null;
@@ -321,16 +518,14 @@ function SwipeableBookingCard({
   activeMatch,
   entryDelay,
 }: SwipeableBookingCardProps) {
-  const { uid }                  = useAuth();
-  const { theme, colorScheme }   = useTheme();
-  const c                        = theme.colors;
-  const isDark                   = colorScheme === 'dark';
-  const S          = useMemo(() => makeStyles(c, isDark), [theme]);
-  const translateX = useSharedValue(0);
+  const { uid }                = useAuth();
+  const { theme, colorScheme } = useTheme();
+  const c                      = theme.colors;
+  const S                      = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme]);
+  const translateX             = useSharedValue(0);
 
-  // Adapt accent colors to the active theme.
-  const accentColor  = activeMatch ? c.accent.primary : c.border.default;
-  const activityKind: ActivityKind = activeMatch ? 'hosted' : 'pure';
+  // Amber left-accent signals an active lobby; neutral means plain booking.
+  const accentColor = activeMatch ? c.status.warning : c.border.default;
 
   const doCancel = useCallback(() => {
     cancelBooking(booking.date, booking.slotTime, uid, booking.courtId).catch(() => {
@@ -406,49 +601,62 @@ function SwipeableBookingCard({
 
       <GestureDetector gesture={pan}>
         <Animated.View style={[S.card, { borderLeftColor: accentColor }, cardStyle]}>
-          <TypeBadge kind={activityKind} />
 
-          <View style={S.cardHeader}>
+          {/* ── SECTION 1: THE BOOKING TICKET ───────────────────────────── */}
+          <View style={S.ticketHeader}>
             <Text style={S.facilityName}>{resolveCourtName(booking.courtId)}</Text>
             <View style={S.badge}>
               <Text style={S.badgeText}>Onaylandı</Text>
             </View>
           </View>
 
-          <View style={S.cardBody}>
-            <View style={S.infoBlock}>
+          <View style={S.ticketMeta}>
+            <View style={S.ticketMetaItem}>
               <Text style={S.infoLabel}>Tarih</Text>
               <Text style={S.infoValue}>{formatBookingDate(booking.date)}</Text>
             </View>
-            <View style={S.infoBlock}>
+            <View style={S.ticketMetaDivider} />
+            <View style={S.ticketMetaItem}>
               <Text style={S.infoLabel}>Saat</Text>
               <Text style={S.infoValue}>{booking.slotTime}</Text>
             </View>
           </View>
 
-          <View style={S.cardFooter}>
-            {activeMatch ? (
-              <TouchableOpacity
-                style={S.activeMatchBadge}
-                activeOpacity={0.75}
-                onPress={() => onViewMatch(activeMatch)}
-              >
-                <Text style={S.activeMatchText}>
-                  {'📢  İlan Yayında · '}
-                  {activeMatch.joinedPlayers.length}/{activeMatch.requiredPlayers}
-                  {' Oyuncu  →'}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={S.findPlayersButton}
-                activeOpacity={0.75}
-                onPress={() => onFindPlayers(booking)}
-              >
-                <Text style={S.findPlayersText}>🎾  Oyuncu Ara</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {/* ── SEPARATOR ────────────────────────────────────────────────── */}
+          <View style={S.ticketSeparator} />
+
+          {/* ── SECTION 2: ACTION / MATCH PANEL ─────────────────────────── */}
+          {activeMatch ? (
+            // STATE B: Active social lobby — amber tint, pops visually
+            <TouchableOpacity
+              style={S.matchLobbyPanel}
+              activeOpacity={0.75}
+              onPress={() => onViewMatch(activeMatch)}
+            >
+              <View style={S.matchLobbyHeader}>
+                <Text style={S.matchLobbyTitle}>📢  İlan Yayında</Text>
+                <View style={S.matchSlotBadge}>
+                  <Text style={S.matchSlotText}>
+                    {activeMatch.joinedPlayers.length}/{activeMatch.requiredPlayers}{' '}Oyuncu
+                  </Text>
+                </View>
+              </View>
+              <Text style={S.matchLobbyCta}>İlan Detaylarını Gör  →</Text>
+            </TouchableOpacity>
+          ) : (
+            // STATE A: Plain booking — low-profile ghost CTA
+            <TouchableOpacity
+              style={S.findPlayersGhost}
+              activeOpacity={0.7}
+              onPress={() => onFindPlayers(booking)}
+            >
+              <View style={S.findPlayersGhostLeft}>
+                <Text style={S.findPlayersGhostLabel}>+ Oyuncu Ara</Text>
+                <Text style={S.findPlayersGhostHint}>İsteğe bağlı · Maç ilanı oluştur</Text>
+              </View>
+              <Text style={S.findPlayersGhostArrow}>›</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </GestureDetector>
     </Animated.View>
@@ -458,9 +666,9 @@ function SwipeableBookingCard({
 // ─── Joined-match card ────────────────────────────────────────────────────────
 
 type JoinedMatchCardProps = {
-  match:       MatchDocument;
+  match:         MatchDocument;
   onViewDetails: () => void;
-  entryDelay:  number;
+  entryDelay:    number;
 };
 
 function JoinedMatchCard({ match, onViewDetails, entryDelay }: JoinedMatchCardProps) {
@@ -468,45 +676,63 @@ function JoinedMatchCard({ match, onViewDetails, entryDelay }: JoinedMatchCardPr
   const c = theme.colors;
   const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme]);
 
-  const courtName = resolveCourtName(match.courtId);
-  const isFull    = match.status === 'FULL';
+  const courtName   = resolveCourtName(match.courtId);
+  const isFull      = match.status === 'FULL';
+  const filledCount = match.joinedPlayers.length;
+  const totalCount  = match.requiredPlayers;
 
   return (
     <Animated.View
       entering={FadeInDown.delay(entryDelay).duration(400).easing(Easing.out(Easing.cubic))}
       style={S.joinedCardWrapper}
     >
+      {/* No swipe gesture — guests cannot cancel someone else's booking. */}
       <TouchableOpacity activeOpacity={0.78} onPress={onViewDetails} style={S.joinedCard}>
-        <TypeBadge kind="joined" />
 
-        <View style={S.cardHeader}>
-          <Text style={S.facilityName}>{courtName}</Text>
-          <View style={[S.badge, isFull && S.badgeFull]}>
-            <Text style={[S.badgeText, isFull && S.badgeTextFull]}>
-              {isFull ? 'Dolu' : 'Açık'}
+        {/* ── Status row ──────────────────────────────────────────────── */}
+        <View style={S.joinedStatusRow}>
+          <View style={[S.joinedStatusBadge, isFull ? S.joinedStatusFull : S.joinedStatusOpen]}>
+            <Text style={isFull ? S.joinedStatusTextFull : S.joinedStatusTextOpen}>
+              {isFull ? '● Dolu' : '● Açık'}
             </Text>
           </View>
+          <Text style={S.joinedParticipantLabel}>🎾 Katılımcı</Text>
         </View>
 
-        <View style={S.cardBody}>
-          <View style={S.infoBlock}>
-            <Text style={S.infoLabel}>Tarih</Text>
-            <Text style={S.infoValue}>{formatBookingDate(match.date)}</Text>
+        {/* ── Player slot display (socially prominent) ────────────────── */}
+        <View style={S.joinedSlotSection}>
+          <View style={S.joinedSlotCountRow}>
+            <Text style={S.joinedSlotNumber}>{filledCount}</Text>
+            <Text style={S.joinedSlotDivider}>/</Text>
+            <Text style={S.joinedSlotTotal}>{totalCount}</Text>
           </View>
-          <View style={S.infoBlock}>
-            <Text style={S.infoLabel}>Saat</Text>
-            <Text style={S.infoValue}>{match.slotTime}</Text>
+          <Text style={S.joinedSlotLabel}>Oyuncu Katıldı</Text>
+          <View style={S.joinedDotRow}>
+            {Array.from({ length: Math.max(0, totalCount) }).map((_, i) => (
+              <View
+                key={i}
+                style={[S.playerDot, i < filledCount && S.playerDotFilled]}
+              />
+            ))}
           </View>
         </View>
 
-        <View style={S.cardFooter}>
-          <View style={S.joinedBadgeRow}>
-            <Text style={S.joinedBadgeText}>
-              {match.joinedPlayers.length}/{match.requiredPlayers} Oyuncu
-            </Text>
-            <Text style={S.viewDetailsHint}>Detayları Gör →</Text>
+        {/* ── Court & time (de-emphasized secondary info) ─────────────── */}
+        <View style={S.joinedCourtSection}>
+          <Text style={S.joinedCourtName}>{courtName}</Text>
+          <View style={S.joinedMetaRow}>
+            <Text style={S.joinedMetaText}>{formatBookingDate(match.date)}</Text>
+            <View style={S.joinedMetaDot} />
+            <Text style={S.joinedMetaText}>{match.slotTime}</Text>
           </View>
         </View>
+
+        {/* ── CTA row ─────────────────────────────────────────────────── */}
+        <View style={S.joinedCtaRow}>
+          <Text style={S.joinedCtaLabel}>Maç Detaylarını Gör</Text>
+          <Text style={S.joinedCtaArrow}>›</Text>
+        </View>
+
       </TouchableOpacity>
     </Animated.View>
   );
@@ -514,7 +740,7 @@ function JoinedMatchCard({ match, onViewDetails, entryDelay }: JoinedMatchCardPr
 
 // ─── Segmented Control ────────────────────────────────────────────────────────
 
-const TABS = ['Rezervasyonlarım', 'Katıldıklarım'] as const;
+const TABS = ['Rezervasyonlarım', 'Katıldığım Maçlar'] as const;
 
 type SegmentedControlProps = {
   activeIndex: number;
@@ -564,29 +790,27 @@ export function MyBookingsScreen() {
   const c = theme.colors;
   const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme]);
 
-  // ── Tab navigation ───────────────────────────────────────────────────────
+  // ── Tab navigation ────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState(0);
-  const prevTabRef = useRef(0);
 
   const handleTabChange = useCallback((tab: number) => {
     if (tab === activeTab) return;
-    prevTabRef.current = activeTab;
     setActiveTab(tab);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   }, [activeTab]);
 
-  // ── Data state ───────────────────────────────────────────────────────────
+  // ── Data state ────────────────────────────────────────────────────────────
   const [bookings,      setBookings]      = useState<ConfirmedBooking[]>([]);
   const [joinedMatches, setJoinedMatches] = useState<MatchDocument[]>([]);
   const [isLoading,     setIsLoading]     = useState(true);
   const [isRefreshing,  setIsRefreshing]  = useState(false);
 
-  // ── Modal state ──────────────────────────────────────────────────────────
+  // ── Modal state ───────────────────────────────────────────────────────────
   const [selectedBookingForMatch, setSelectedBookingForMatch] =
     useState<ConfirmedBooking | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
-  // ── Derived data ─────────────────────────────────────────────────────────
+  // ── Derived data ──────────────────────────────────────────────────────────
 
   const hostedMatchByBookingId = useMemo(
     () => new Map(joinedMatches.filter((m) => m.hostId === uid).map((m) => [m.bookingId, m])),
@@ -607,7 +831,7 @@ export function MyBookingsScreen() {
     };
   }, [selectedMatch]);
 
-  // ── Tab 0: Rezervasyonlarım (own bookings + hosted match listings) ────────
+  // ── Tab 0: Rezervasyonlarım ───────────────────────────────────────────────
   const reservationsTabItems = useMemo((): ActivityItem[] =>
     bookings.map((b) => ({
       kind:    'booking',
@@ -617,7 +841,7 @@ export function MyBookingsScreen() {
     })),
   [bookings, hostedMatchByBookingId]);
 
-  // ── Tab 1: Katıldıklarım (joined as participant, not host) ───────────────
+  // ── Tab 1: Katıldığım Maçlar (participant only, not host) ─────────────────
   const joinedTabItems = useMemo((): ActivityItem[] =>
     joinedMatches
       .filter((m) => m.hostId !== uid)
@@ -638,7 +862,7 @@ export function MyBookingsScreen() {
 
   useEffect(() => subscribeToMyJoinedMatches(uid, setJoinedMatches), [uid]);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     setTimeout(() => setIsRefreshing(false), 700);
@@ -660,11 +884,6 @@ export function MyBookingsScreen() {
     );
   }
 
-  // Direction for slide-in animation
-  const listEntering = activeTab > prevTabRef.current
-    ? FadeInRight.duration(320).easing(Easing.out(Easing.cubic))
-    : FadeInLeft.duration(320).easing(Easing.out(Easing.cubic));
-
   const emptyMessages = [
     {
       title: 'Henüz rezervasyon yok',
@@ -678,7 +897,7 @@ export function MyBookingsScreen() {
 
   return (
     <SafeAreaView style={S.safeArea}>
-      {/* ── Static header — never re-mounts ────────────────────────────── */}
+      {/* ── Static header — never re-mounts ─────────────────────────────── */}
       <View style={S.staticHeader}>
         <Text style={S.header}>Etkinliklerim</Text>
         <SegmentedControl
@@ -688,15 +907,15 @@ export function MyBookingsScreen() {
         />
       </View>
 
-      {/* ── Animated list — re-mounts on tab switch to trigger enter anim ── */}
-      <Animated.View
-        key={`tab-${activeTab}`}
-        entering={listEntering}
-        style={S.listWrapper}
-      >
-        <FlatList<ActivityItem>
+      {/* ── List — stays mounted across tab switches.
+           key intentionally omitted to preserve the view recycler pool.
+           itemLayoutAnimation drives smooth per-cell transitions when
+           activeItems swaps between the two data arrays.            ── */}
+      <Animated.View style={S.listWrapper}>
+        <Animated.FlatList<ActivityItem>
           data={activeItems}
           keyExtractor={(item) => item.id}
+          itemLayoutAnimation={LinearTransition.springify().mass(0.8)}
           contentContainerStyle={[
             S.listContent,
             activeItems.length === 0 && S.listContentEmpty,
@@ -727,8 +946,8 @@ export function MyBookingsScreen() {
                 <SwipeableBookingCard
                   booking={item.booking}
                   onFindPlayers={(booking) =>
-                  requireVerification(() => setSelectedBookingForMatch(booking))
-                }
+                    requireVerification(() => setSelectedBookingForMatch(booking))
+                  }
                   onViewMatch={openMatchDetails}
                   activeMatch={item.match}
                   entryDelay={delay}
@@ -746,7 +965,7 @@ export function MyBookingsScreen() {
         />
       </Animated.View>
 
-      {/* ── Modals ────────────────────────────────────────────────────────── */}
+      {/* ── Modals ──────────────────────────────────────────────────────── */}
       {selectedBookingForMatch && (
         <PublishMatchModal
           isVisible

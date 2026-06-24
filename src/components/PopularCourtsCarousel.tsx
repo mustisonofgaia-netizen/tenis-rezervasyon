@@ -7,8 +7,9 @@
  *  - Each CarouselCard receives the shared scrollX value and drives its own scale (1→0.9)
  *    and opacity (1→0.7) via useAnimatedStyle — fully on the UI thread.
  *  - contentContainerStyle paddingHorizontal centres the first and last card in the viewport.
- *  - Frosted-glass info panel uses rgba(255,255,255,0.90) to simulate blur without expo-blur.
+ *  - Frosted-glass info panel uses expo-blur BlurView for native iOS/Android glassmorphism.
  */
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback } from 'react';
 import {
@@ -33,11 +34,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const CARD_WIDTH    = SCREEN_WIDTH * 0.85;
 const        CARD_HEIGHT   = 268;
-const        CARD_GAP      = 14;
+const        CARD_GAP      = 16;
 export const SNAP_INTERVAL = CARD_WIDTH + CARD_GAP;
 
 // Horizontal padding so the first and last card appear centred in the viewport.
-// When scroll offset = i * SNAP_INTERVAL, card i is exactly centred.
 const H_PAD = (SCREEN_WIDTH - CARD_WIDTH) / 2;
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -117,8 +117,8 @@ function CarouselCard({ court, index, scrollX, accentColor, onPress }: CarouselC
           <Text style={styles.ratingText}>⭐  {court.rating}</Text>
         </View>
 
-        {/* Frosted-glass info panel — solid semi-opaque white simulates the blur tint */}
-        <View style={styles.glassContent}>
+        {/* Native glassmorphism info panel */}
+        <BlurView intensity={85} tint="light" style={styles.glassContent}>
           <View style={styles.glassContentInner}>
             <View style={styles.infoRow}>
               <View style={styles.infoText}>
@@ -138,13 +138,8 @@ function CarouselCard({ court, index, scrollX, accentColor, onPress }: CarouselC
               </TouchableOpacity>
             </View>
 
-            <View style={styles.scrollHint}>
-              <Ionicons name="chevron-back-outline"    size={11} color="rgba(15,23,42,0.35)" />
-              <Text style={styles.scrollHintText}>Popüler kortları keşfet</Text>
-              <Ionicons name="chevron-forward-outline" size={11} color="rgba(15,23,42,0.35)" />
-            </View>
           </View>
-        </View>
+        </BlurView>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -188,14 +183,10 @@ export function PopularCourtsCarousel({ accentColor, onCardPress }: PopularCourt
         keyExtractor={(item) => item.id}
         horizontal
         showsHorizontalScrollIndicator={false}
-        // Crisp snap: each card snaps to its centred position
         snapToInterval={SNAP_INTERVAL}
+        snapToAlignment="center"
         decelerationRate="fast"
-        // contentContainerStyle centres the first/last card; gap separates items
-        contentContainerStyle={styles.listContent}
-        // ItemSeparatorComponent drives the CARD_GAP reliably across all RN versions
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        // Throttle ensures the Reanimated worklet fires at native frame rate
+        contentContainerStyle={{ paddingHorizontal: H_PAD, gap: CARD_GAP }}
         scrollEventThrottle={16}
         onScroll={onScroll}
         initialNumToRender={DECK_COURTS.length}
@@ -211,14 +202,6 @@ export function PopularCourtsCarousel({ accentColor, onCardPress }: PopularCourt
 const styles = StyleSheet.create({
   container: {
     height: CARD_HEIGHT,
-  },
-
-  listContent: {
-    paddingHorizontal: H_PAD,
-  },
-
-  separator: {
-    width: CARD_GAP,
   },
 
   cardWrapper: {
@@ -260,21 +243,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
-  // ── Frosted-glass info panel (BlurView-free fallback) ────────────────────
+  // ── Frosted-glass info panel (native BlurView) ───────────────────────────
   glassContent: {
     position:        'absolute',
     bottom:          0,
     left:            0,
     right:           0,
-    // rgba(255,255,255,0.90) simulates a frosted-glass tint without native blur
-    backgroundColor: 'rgba(255, 255, 255, 0.90)',
+    overflow:        'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderTopWidth:  1,
     borderTopColor:  'rgba(0, 0, 0, 0.08)',
   },
   glassContentInner: {
-    padding:    18,
-    paddingTop: 14,
-    gap:        8,
+    paddingHorizontal: 18,
+    paddingVertical:   16,
   },
   infoRow: {
     flexDirection:  'row',
@@ -317,16 +299,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
 
-  // ── Scroll hint ───────────────────────────────────────────────────────────
-  scrollHint: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'center',
-    gap:            5,
-  },
-  scrollHintText: {
-    fontSize:   11,
-    fontWeight: '500',
-    color:      'rgba(15, 23, 42, 0.40)',
-  },
 });

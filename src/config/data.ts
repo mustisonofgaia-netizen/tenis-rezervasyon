@@ -11,6 +11,9 @@ export type Club = {
   facilities: string[];
   /** Surface / court-type tags — drives ExploreScreen filter pills */
   surfaces: string[];
+  /** Geographic coordinates for map markers (mock positions around Ankara) */
+  latitude:  number;
+  longitude: number;
 };
 
 // ─── Court (enriched with club ownership) ────────────────────────────────────
@@ -25,18 +28,22 @@ export const CLUBS: Club[] = [
     name: 'Midas Tenis Kulübü',
     address: 'Ataşehir, İstanbul',
     imageUrl:
-      'https://images.unsplash.com/photo-1562552476-4d7872d1e40c?w=800&q=80',
+      'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=800&q=80',
     facilities: ['Otopark', 'Duş', 'Kafeterya'],
-    surfaces: ['Toprak Kort', 'Kapalı Kort'],
+    surfaces:   ['Toprak Kort', 'Kapalı Kort'],
+    latitude:   39.9198,
+    longitude:  32.8441,
   },
   {
     id: 'club_2',
     name: 'Bosphorus Padel Center',
     address: 'Beşiktaş, İstanbul',
     imageUrl:
-      'https://images.unsplash.com/photo-1626088004984-c748428d80b9?w=800&q=80',
+      'https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?w=800&q=80',
     facilities: ['Otopark', 'Duş', 'Pro Shop'],
-    surfaces: ['Sert Zemin', 'Kapalı Kort'],
+    surfaces:   ['Sert Zemin', 'Kapalı Kort'],
+    latitude:   39.9479,
+    longitude:  32.8712,
   },
   {
     id: 'club_3',
@@ -45,7 +52,9 @@ export const CLUBS: Club[] = [
     imageUrl:
       'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?w=800&q=80',
     facilities: ['Otopark', 'Restoran', 'Fitness'],
-    surfaces: ['Toprak Kort', 'Açık Kort'],
+    surfaces:   ['Toprak Kort', 'Açık Kort'],
+    latitude:   39.9045,
+    longitude:  32.8603,
   },
   {
     id: 'club_4',
@@ -54,7 +63,9 @@ export const CLUBS: Club[] = [
     imageUrl:
       'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=800&q=80',
     facilities: ['Otopark', 'Kafeterya', 'Soyunma Odası'],
-    surfaces: ['Sert Zemin', 'Açık Kort'],
+    surfaces:   ['Sert Zemin', 'Açık Kort'],
+    latitude:   39.9512,
+    longitude:  32.8388,
   },
   {
     id: 'club_5',
@@ -63,7 +74,9 @@ export const CLUBS: Club[] = [
     imageUrl:
       'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=800&q=80',
     facilities: ['Otopark', 'Havuz', 'Kafeterya'],
-    surfaces: ['Toprak Kort', 'Sert Zemin', 'Kapalı Kort'],
+    surfaces:   ['Toprak Kort', 'Sert Zemin', 'Kapalı Kort'],
+    latitude:   39.9334,
+    longitude:  32.8901,
   },
   {
     id: 'club_6',
@@ -72,7 +85,9 @@ export const CLUBS: Club[] = [
     imageUrl:
       'https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?w=800&q=80',
     facilities: ['Otopark', 'Duş', 'Pro Shop'],
-    surfaces: ['Açık Kort', 'Sert Zemin'],
+    surfaces:   ['Açık Kort', 'Sert Zemin'],
+    latitude:   39.9187,
+    longitude:  32.8835,
   },
 ];
 
