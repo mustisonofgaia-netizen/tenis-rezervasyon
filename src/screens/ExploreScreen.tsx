@@ -4,7 +4,7 @@
  * Sections (top → bottom):
  *  1. Editorial header  — weather widget · personalised greeting · hero title · search bar
  *  2. Horizontal pills  — single-select filter row
- *  3. Hero image card   — full-bleed photo, gradient, rating badge, CTA
+ *  3. Carousel          — App Store-style snap carousel (PopularCourtsCarousel)
  *  4. Top Rated         — horizontal scroll of top-3 clubs
  *  5. All clubs feed    — themed ClubCard vertical list
  */
@@ -32,6 +32,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PopularCourtsCarousel } from '../components/PopularCourtsCarousel';
+import type { DeckCourt } from '../components/PopularCourtsCarousel';
+
 import { CLUBS, getCourtsByClubId } from '../config/data';
 import type { Club, ClubCourt } from '../config/data';
 import type { ExploreStackParamList } from '../navigation/types';
@@ -49,9 +52,6 @@ type ExploreNavProp = NativeStackNavigationProp<ExploreStackParamList, 'ExploreH
 const H_PAD = 24;
 
 const FILTERS = ['Tümü', 'Toprak Kort', 'Sert Zemin', 'Kapalı Kort', 'Açık Kort'] as const;
-
-const HERO_IMAGE_URI =
-  'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?w=800&q=80';
 
 // Stable mock distances keyed by club ID so they survive filter reorders
 const MOCK_DISTANCE_MAP: Record<string, string> = {
@@ -145,64 +145,9 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
       letterSpacing: 0.1,
     },
 
-    // ── Hero card ──────────────────────────────────────────────────────────
-    heroSection: {
-      paddingHorizontal: H_PAD,
-      marginBottom:      28,
-    },
-    heroCard: {
-      height:         268,
-      borderRadius:   24,
-      overflow:       'hidden',
-      justifyContent: 'flex-end',
-    },
-    heroOverlay: {
-      backgroundColor: 'rgba(15,23,42,0.60)',
-    },
-    ratingBadge: {
-      position:          'absolute',
-      top:               14,
-      right:             14,
-      backgroundColor:   'rgba(0,0,0,0.60)',
-      paddingHorizontal: 12,
-      paddingVertical:   6,
-      borderRadius:      20,
-    },
-    ratingText: {
-      fontSize:      fontSizes.xs,
-      fontWeight:    fontWeights.bold,
-      color:         '#FFFFFF',
-      letterSpacing: 0.2,
-    },
-    heroContent: {
-      padding: H_PAD,
-      gap:     6,
-    },
-    heroTitle: {
-      fontSize:      fontSizes['2xl'],
-      fontWeight:    fontWeights.extrabold,
-      color:         '#FFFFFF',
-      letterSpacing: -0.5,
-    },
-    heroSubtitle: {
-      fontSize:     fontSizes.sm,
-      fontWeight:   fontWeights.regular,
-      color:        'rgba(255,255,255,0.72)',
-      marginBottom: 8,
-    },
-    heroCta: {
-      flexDirection:     'row',
-      alignItems:        'center',
-      alignSelf:         'flex-start',
-      paddingHorizontal: 18,
-      paddingVertical:   10,
-      borderRadius:      14,
-    },
-    heroCtaText: {
-      fontSize:      fontSizes.sm,
-      fontWeight:    fontWeights.bold,
-      color:         '#FFFFFF',
-      letterSpacing: 0.1,
+    // ── Carousel section — no horizontal padding; the FlatList centres its own cards ─
+    deckSection: {
+      marginBottom: 28,
     },
 
     // ── Section header ─────────────────────────────────────────────────────
@@ -323,6 +268,78 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
       letterSpacing: 0.1,
     },
 
+    // ── Glass ClubCard (Top Rated horizontal list) ─────────────────────────
+    glassCard: {
+      height:        200,
+      borderRadius:  22,
+      overflow:      'hidden',
+      borderWidth:   1,
+      borderColor:   'rgba(255, 255, 255, 0.30)',
+      shadowColor:   '#000000',
+      shadowOffset:  { width: 0, height: 6 },
+      shadowOpacity: 0.22,
+      shadowRadius:  20,
+      elevation:     5,
+    },
+    glassCardOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(15, 23, 42, 0.30)',
+    },
+    glassCourtBadge: {
+      position:          'absolute',
+      top:               12,
+      right:             12,
+      flexDirection:     'row',
+      alignItems:        'center',
+      gap:               4,
+      backgroundColor:   'rgba(0, 0, 0, 0.50)',
+      paddingHorizontal: 10,
+      paddingVertical:   5,
+      borderRadius:      20,
+    },
+    glassCourtText: {
+      fontSize:   11,
+      fontWeight: fontWeights.bold,
+      color:      '#FFFFFF',
+    },
+    glassInfoPanel: {
+      position:        'absolute',
+      bottom:          0,
+      left:            0,
+      right:           0,
+      // rgba(255,255,255,0.90) simulates a frosted-glass tint without native blur
+      backgroundColor: 'rgba(255, 255, 255, 0.90)',
+      borderTopWidth:  1,
+      borderTopColor:  'rgba(0, 0, 0, 0.08)',
+    },
+    glassInfoInner: {
+      paddingHorizontal: 14,
+      paddingVertical:   12,
+      gap:               4,
+    },
+    glassClubName: {
+      fontSize:      14,
+      fontWeight:    fontWeights.extrabold,
+      color:         '#0f172a',
+      letterSpacing: -0.3,
+    },
+    glassAddressRow: {
+      flexDirection: 'row',
+      alignItems:    'center',
+      gap:           3,
+    },
+    glassAddressText: {
+      flex:       1,
+      fontSize:   11,
+      fontWeight: fontWeights.regular,
+      color:      'rgba(15, 23, 42, 0.60)',
+    },
+    glassDistanceText: {
+      fontSize:   11,
+      fontWeight: fontWeights.bold,
+      color:      'rgba(15, 23, 42, 0.80)',
+    },
+
     // ── Empty state ────────────────────────────────────────────────────────
     emptyState: {
       alignItems:        'center',
@@ -340,49 +357,6 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
   });
 }
 
-// ─── Hero card ────────────────────────────────────────────────────────────────
-
-type HeroCardProps = {
-  accentColor: string;
-  onPress:     () => void;
-};
-
-function HeroCard({ accentColor, onPress }: HeroCardProps) {
-  const { theme, colorScheme } = useTheme();
-  const S = useMemo(() => makeStyles(theme.colors, colorScheme === 'dark'), [theme, colorScheme]);
-
-  return (
-    <TouchableOpacity style={S.heroCard} activeOpacity={0.92} onPress={onPress}>
-
-      <ImageBackground
-        source={{ uri: HERO_IMAGE_URI }}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
-      />
-
-      <View style={[StyleSheet.absoluteFillObject, S.heroOverlay]} />
-
-      <View style={S.ratingBadge}>
-        <Text style={S.ratingText}>⭐  4.8</Text>
-      </View>
-
-      <View style={S.heroContent}>
-        <Text style={S.heroTitle}>Popüler Kortlar</Text>
-        <Text style={S.heroSubtitle}>İstanbul'un en iyi kort seçenekleri</Text>
-        <TouchableOpacity
-          style={[S.heroCta, { backgroundColor: accentColor }]}
-          activeOpacity={0.85}
-          onPress={onPress}
-        >
-          <Text style={S.heroCtaText}>Rezervasyon Yap</Text>
-          <Ionicons name="arrow-forward" size={14} color="#FFFFFF" style={{ marginLeft: 6 }} />
-        </TouchableOpacity>
-      </View>
-
-    </TouchableOpacity>
-  );
-}
-
 // ─── Club card ────────────────────────────────────────────────────────────────
 
 type ClubCardProps = {
@@ -391,12 +365,45 @@ type ClubCardProps = {
   theme:    Theme;
   distance: string;
   onPress:  () => void;
+  /** When true, renders as a full-bleed image card with glassmorphism info panel. */
+  glass?:   boolean;
 };
 
-function ClubCard({ club, courts, theme, distance, onPress }: ClubCardProps) {
+function ClubCard({ club, courts, theme, distance, onPress, glass = false }: ClubCardProps) {
   const { colorScheme } = useTheme();
   const c = theme.colors;
   const S = useMemo(() => makeStyles(c, colorScheme === 'dark'), [theme, colorScheme]);
+
+  if (glass) {
+    return (
+      <TouchableOpacity activeOpacity={0.88} onPress={onPress} style={S.glassCard}>
+        <ImageBackground
+          source={{ uri: club.imageUrl }}
+          style={StyleSheet.absoluteFillObject}
+          resizeMode="cover"
+        />
+        <View style={S.glassCardOverlay} />
+
+        {/* Court count badge */}
+        <View style={S.glassCourtBadge}>
+          <Ionicons name="tennisball-outline" size={12} color="#FFFFFF" />
+          <Text style={S.glassCourtText}>{courts.length} Kort</Text>
+        </View>
+
+        {/* Frosted-glass info panel */}
+        <View style={S.glassInfoPanel}>
+          <View style={S.glassInfoInner}>
+            <Text style={S.glassClubName} numberOfLines={1}>{club.name}</Text>
+            <View style={S.glassAddressRow}>
+              <Ionicons name="location-outline" size={11} color="rgba(15,23,42,0.55)" />
+              <Text style={S.glassAddressText} numberOfLines={1}>{club.address}</Text>
+              <Text style={S.glassDistanceText}>{distance}</Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <TouchableOpacity
@@ -571,17 +578,19 @@ export function ExploreScreen() {
         {/* ── 3 & 4. Promotional block — hidden while filtering ────────── */}
         {!isFiltering && (
           <>
-            {/* Hero card */}
+            {/* Swipeable court deck */}
             <Animated.View
               entering={slide(160)}
               exiting={FadeOutUp.duration(250)}
-              style={S.heroSection}
+              style={S.deckSection}
             >
-              <HeroCard
+              <PopularCourtsCarousel
                 accentColor={c.accent.primary}
-                onPress={() => {
+                onCardPress={(court: DeckCourt) => {
+                  const clubIndex = parseInt(court.id, 10) - 1;
+                  const club = CLUBS[Math.max(0, Math.min(clubIndex, CLUBS.length - 1))];
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-                  navigation.navigate('BookingScreen', { clubId: CLUBS[0].id });
+                  navigation.navigate('BookingScreen', { clubId: club.id });
                 }}
               />
             </Animated.View>
@@ -609,6 +618,7 @@ export function ExploreScreen() {
                       courts={getCourtsByClubId(club.id)}
                       theme={theme}
                       distance={MOCK_DISTANCE_MAP[club.id] ?? '—'}
+                      glass
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                         navigation.navigate('BookingScreen', { clubId: club.id });
