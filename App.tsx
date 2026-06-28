@@ -27,6 +27,8 @@ import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TournamentScreen } from './src/screens/TournamentScreen';
 import { CreateTournamentScreen } from './src/screens/CreateTournamentScreen';
 import { OrganizerDashboardScreen } from './src/screens/OrganizerDashboardScreen';
+import { TournamentDetailScreen }     from './src/screens/TournamentDetailScreen';
+import { CreateEditTournamentScreen } from './src/screens/CreateEditTournamentScreen';
 import { auth, db } from './src/services/firebase';
 import type { AdminRole } from './src/types/user';
 import type {
@@ -152,9 +154,11 @@ const TournamentStack = createNativeStackNavigator<TournamentStackParamList>();
 function TournamentNavigator() {
   return (
     <TournamentStack.Navigator screenOptions={{ headerShown: false }}>
-      <TournamentStack.Screen name="TournamentHome"      component={TournamentScreen} />
-      <TournamentStack.Screen name="CreateTournament"    component={CreateTournamentScreen} />
-      <TournamentStack.Screen name="OrganizerDashboard"  component={OrganizerDashboardScreen} />
+      <TournamentStack.Screen name="TournamentHome"         component={TournamentScreen} />
+      <TournamentStack.Screen name="CreateTournament"       component={CreateTournamentScreen} />
+      <TournamentStack.Screen name="CreateEditTournament"   component={CreateEditTournamentScreen} />
+      <TournamentStack.Screen name="OrganizerDashboard"     component={OrganizerDashboardScreen} />
+      <TournamentStack.Screen name="TournamentDetail"       component={TournamentDetailScreen} />
     </TournamentStack.Navigator>
   );
 }

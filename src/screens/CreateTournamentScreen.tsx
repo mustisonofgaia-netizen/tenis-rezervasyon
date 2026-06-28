@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -38,6 +39,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import type { ColorTokens } from '../theme/tokens';
+import { createTournament } from '../services/tournamentService';
 import type {
   TierAssignment,
   TieBreakerCriterion,
@@ -543,8 +545,9 @@ export function CreateTournamentScreen() {
   const c          = theme.colors;
   const S          = useMemo(() => makeStyles(c), [theme]);
 
-  const [step,  setStep]  = useState(0);
-  const [draft, setDraft] = useState<WizardDraft>(INITIAL_DRAFT);
+  const [step,        setStep]        = useState(0);
+  const [draft,       setDraft]       = useState<WizardDraft>(INITIAL_DRAFT);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const patch = useCallback(<K extends keyof WizardDraft>(key: K, value: WizardDraft[K]) => {
     setDraft(d => ({ ...d, [key]: value }));
@@ -581,7 +584,7 @@ export function CreateTournamentScreen() {
 
   // ── Validation + submission ────────────────────────────────────────────────
 
-  const handleNext = useCallback(() => {
+  const handleNext = useCallback(async () => {
     // ── Step 1 validation ────────────────────────────────────────────────────
     if (step === 0) {
       if (!draft.title.trim()) {
@@ -611,17 +614,21 @@ export function CreateTournamentScreen() {
       return;
     }
 
-    // ── Final step: build typed payload ──────────────────────────────────────
+    // ── Final step: guard, build payload, persist ─────────────────────────────
+    if (!uid) {
+      Alert.alert('Hata', 'Turnuva oluşturmak için giriş yapmanız gerekiyor.');
+      return;
+    }
+
     const fee = parseFloat(draft.entryFeeText.replace(',', '.'));
 
-    const payload = {
+    const payload: Omit<import('../types/tournament').Tournament, 'id' | 'createdAt'> = {
       title:              draft.title.trim(),
       type:               draft.type,
       format:             draft.format,
       visibility:         draft.visibility,
       organizerId:        uid,
-      status:             'upcoming' as const,
-      createdAt:          Date.now(),
+      status:             'upcoming',
       matchRules: {
         setsToWin:       draft.setsToWin,
         winByTwo:        draft.winByTwo,
@@ -646,19 +653,23 @@ export function CreateTournamentScreen() {
               tierAssignments: draft.tierAssignments,
               updateFrequency: draft.updateFrequency,
             },
-            ...(draft.updateFrequency === 'periodic' && {
-              periodicInterval: draft.periodicInterval,
-            }),
           }),
     };
 
-    console.log('[CreateTournament] Payload:', JSON.stringify(payload, null, 2));
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert(
-      'Turnuva Oluşturuldu',
-      `"${draft.title.trim()}" başarıyla yapılandırıldı.`,
-      [{ text: 'Tamam', onPress: () => navigation.goBack() }],
-    );
+    setIsSubmitting(true);
+    try {
+      await createTournament(payload);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      navigation.goBack();
+    } catch (error) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        'Hata',
+        error instanceof Error ? error.message : 'Turnuva oluşturulamadı. Lütfen tekrar deneyin.',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }, [step, draft, uid, navigate, navigation]);
 
   // ── Step 1 ────────────────────────────────────────────────────────────────
@@ -1214,18 +1225,25 @@ export function CreateTournamentScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={S.barNextBtn}
+            style={[S.barNextBtn, isSubmitting && { opacity: 0.6 }]}
             onPress={handleNext}
             activeOpacity={0.85}
+            disabled={isSubmitting}
           >
-            <Text style={S.barNextBtnText}>
-              {step === TOTAL_STEPS - 1 ? 'Oluştur' : 'Devam Et'}
-            </Text>
-            <Ionicons
-              name={step === TOTAL_STEPS - 1 ? 'checkmark-circle-outline' : 'chevron-forward'}
-              size={16}
-              color={c.text.inverse}
-            />
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color={c.text.inverse} />
+            ) : (
+              <>
+                <Text style={S.barNextBtnText}>
+                  {step === TOTAL_STEPS - 1 ? 'Oluştur' : 'Devam Et'}
+                </Text>
+                <Ionicons
+                  name={step === TOTAL_STEPS - 1 ? 'checkmark-circle-outline' : 'chevron-forward'}
+                  size={16}
+                  color={c.text.inverse}
+                />
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </View>

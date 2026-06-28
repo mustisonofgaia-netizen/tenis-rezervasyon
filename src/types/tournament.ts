@@ -346,6 +346,14 @@ export type Tournament = {
   /** Epoch-ms creation timestamp. */
   createdAt: number;
 
+  // ── Scheduling & location ─────────────────────────────────────────────────
+  /** Epoch-ms timestamp when the tournament starts (first match day). */
+  startDate: number;
+  /** Epoch-ms timestamp when the tournament ends (last match day / finals). */
+  endDate: number;
+  /** Venue or city where matches are played (free-form string). */
+  location: string;
+
   // ── Privacy ──────────────────────────────────────────────────────────────
   visibility: TournamentVisibilityLevel;
   /**

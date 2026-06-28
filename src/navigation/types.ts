@@ -12,12 +12,16 @@ export type ExploreStackParamList = {
 // ─── Tournament stack ─────────────────────────────────────────────────────────
 
 export type TournamentStackParamList = {
-  /** Main tournament hub with Lig / Defi / Özel tabs */
-  TournamentHome:      undefined;
-  /** Organizer-only screen for creating a new tournament */
-  CreateTournament:    undefined;
+  /** Main tournament hub — Keşfet / Turnuvalarım segments */
+  TournamentHome:        undefined;
+  /** Legacy wizard — create only (kept for backward compat) */
+  CreateTournament:      undefined;
+  /** Combined create / edit wizard.  `tournamentId` present ⟹ edit mode. */
+  CreateEditTournament:  { tournamentId?: string };
   /** Organizer dashboard — pending registrations and match approvals */
-  OrganizerDashboard:  undefined;
+  OrganizerDashboard:    undefined;
+  /** Full detail view for a single tournament */
+  TournamentDetail:      { tournamentId: string };
 };
 
 // ─── Root tab navigator ───────────────────────────────────────────────────────
