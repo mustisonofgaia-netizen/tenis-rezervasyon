@@ -15,6 +15,7 @@ import {
   Modal,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -35,8 +36,8 @@ const SKILL_OPTIONS: SkillOption[] = [
   { value: 'ADVANCED',     label: 'İleri Seviye', color: '#F97316' },
 ];
 
-/** Total-player options (host is always included). */
-const PLAYER_OPTIONS = [2, 3, 4] as const;
+/** Total-player options — tennis is Singles (2) or Doubles (4) only. */
+const PLAYER_OPTIONS = [2, 4] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -72,15 +73,17 @@ export function PublishMatchModal({
   const { uid } = useAuth();
 
   const [skillLevel, setSkillLevel]         = useState<SkillLevel>('INTERMEDIATE');
-  const [requiredPlayers, setRequiredPlayers] = useState<2 | 3 | 4>(3);
+  const [requiredPlayers, setRequiredPlayers] = useState<2 | 4>(2);
   const [isPublishing, setIsPublishing]     = useState(false);
+  const [locationText, setLocationText]     = useState('');
 
   // Reset form each time the modal opens so it always starts fresh
   useEffect(() => {
     if (!isVisible) return;
     setSkillLevel('INTERMEDIATE');
-    setRequiredPlayers(3);
+    setRequiredPlayers(2);
     setIsPublishing(false);
+    setLocationText('');
   }, [isVisible]);
 
   const handlePublish = useCallback(async () => {
@@ -94,6 +97,7 @@ export function PublishMatchModal({
         slotTime:        booking.slotTime,
         requiredPlayers,
         skillLevel,
+        locationText:    locationText.trim() || undefined,
       });
       Alert.alert(
         '🎾 İlan Yayınlandı!',
@@ -105,7 +109,7 @@ export function PublishMatchModal({
       Alert.alert('Hata', msg);
       setIsPublishing(false);
     }
-  }, [booking, uid, requiredPlayers, skillLevel, onClose]);
+  }, [booking, uid, requiredPlayers, skillLevel, locationText, onClose]);
 
   return (
     <Modal
@@ -200,6 +204,20 @@ export function PublishMatchModal({
               );
             })}
           </View>
+
+          {/* ── Location input ─────────────────────────────────────── */}
+          <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
+            Konum (İl/İlçe veya Tesis)
+          </Text>
+          <TextInput
+            value={locationText}
+            onChangeText={setLocationText}
+            placeholder="Örn: Çankaya / Ankara Tenis Kulübü"
+            placeholderTextColor="#9CA3AF"
+            style={styles.locationInput}
+            returnKeyType="done"
+            autoCorrect={false}
+          />
 
           <View style={styles.divider} />
 
@@ -356,5 +374,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.3,
+  },
+
+  // ── Location input ────────────────────────────────────────────────────────
+  locationInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    fontSize: 14,
+    color: '#0F172A',
   },
 });

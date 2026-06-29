@@ -18,7 +18,7 @@ import { confirmSlot, unlockSlot } from '../services/bookingService';
 import type { ColorTokens } from '../theme/tokens';
 import type { CourtId } from '../types/booking';
 
-const COUNTDOWN_TOTAL = 10 * 60; // 600 s — mirrors LOCK_DURATION_MS
+const COUNTDOWN_TOTAL = 5 * 60; // 300 s — mirrors LOCK_DURATION_MS
 
 function formatCountdown(seconds: number): string {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');

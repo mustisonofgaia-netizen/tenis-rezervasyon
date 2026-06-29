@@ -26,18 +26,18 @@ export const CLUBS: Club[] = [
   {
     id: 'club_1',
     name: 'Midas Tenis Kulübü',
-    address: 'Ataşehir, İstanbul',
+    address: 'Çankaya, Ankara',
     imageUrl:
       'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=800&q=80',
     facilities: ['Otopark', 'Duş', 'Kafeterya'],
     surfaces:   ['Toprak Kort', 'Kapalı Kort'],
     latitude:   39.9198,
-    longitude:  32.8441,
+    longitude:  32.8550,
   },
   {
     id: 'club_2',
-    name: 'Bosphorus Padel Center',
-    address: 'Beşiktaş, İstanbul',
+    name: 'Başkent Padel Center',
+    address: 'Yenimahalle, Ankara',
     imageUrl:
       'https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?w=800&q=80',
     facilities: ['Otopark', 'Duş', 'Pro Shop'],
@@ -47,8 +47,8 @@ export const CLUBS: Club[] = [
   },
   {
     id: 'club_3',
-    name: 'Fenerbahçe Tenis Akademisi',
-    address: 'Kadıköy, İstanbul',
+    name: 'Ankara Tenis Akademisi',
+    address: 'Keçiören, Ankara',
     imageUrl:
       'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?w=800&q=80',
     facilities: ['Otopark', 'Restoran', 'Fitness'],
@@ -58,36 +58,36 @@ export const CLUBS: Club[] = [
   },
   {
     id: 'club_4',
-    name: 'Sarıyer Tenis Akademisi',
-    address: 'Sarıyer, İstanbul',
+    name: 'Kızılay Tenis Akademisi',
+    address: 'Çankaya, Ankara',
     imageUrl:
       'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=800&q=80',
     facilities: ['Otopark', 'Kafeterya', 'Soyunma Odası'],
     surfaces:   ['Sert Zemin', 'Açık Kort'],
-    latitude:   39.9512,
-    longitude:  32.8388,
+    latitude:   39.9200,
+    longitude:  32.8620,
   },
   {
     id: 'club_5',
-    name: 'Beylikdüzü Spor Kompleksi',
-    address: 'Beylikdüzü, İstanbul',
+    name: 'Etlik Spor Kompleksi',
+    address: 'Keçiören, Ankara',
     imageUrl:
       'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=800&q=80',
     facilities: ['Otopark', 'Havuz', 'Kafeterya'],
     surfaces:   ['Toprak Kort', 'Sert Zemin', 'Kapalı Kort'],
-    latitude:   39.9334,
-    longitude:  32.8901,
+    latitude:   39.9622,
+    longitude:  32.8480,
   },
   {
     id: 'club_6',
-    name: 'Bakırköy Tenis Merkezi',
-    address: 'Bakırköy, İstanbul',
+    name: 'Gazi Tenis Merkezi',
+    address: 'Yenimahalle, Ankara',
     imageUrl:
       'https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?w=800&q=80',
     facilities: ['Otopark', 'Duş', 'Pro Shop'],
     surfaces:   ['Açık Kort', 'Sert Zemin'],
-    latitude:   39.9187,
-    longitude:  32.8835,
+    latitude:   39.9380,
+    longitude:  32.8100,
   },
 ];
 

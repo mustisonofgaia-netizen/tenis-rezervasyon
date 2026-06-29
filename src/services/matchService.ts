@@ -29,6 +29,7 @@ export type PublishMatchInput = {
   slotTime: string;
   requiredPlayers: number;
   skillLevel: SkillLevel;
+  locationText?: string;
 };
 
 /**

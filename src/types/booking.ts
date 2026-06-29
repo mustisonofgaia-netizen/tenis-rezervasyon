@@ -71,4 +71,4 @@ export const DEFAULT_SLOT_TIMES = [
   '23:00',
 ] as const;
 
-export const LOCK_DURATION_MS = 10 * 60 * 1000; // 10 minutes
+export const LOCK_DURATION_MS = 5 * 60 * 1000; // 5 minutes

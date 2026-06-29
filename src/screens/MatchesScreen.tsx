@@ -517,7 +517,7 @@ function MatchCard({
       </View>
 
       <Text style={S.playerCountText}>
-        {match.joinedPlayers.length}/{match.requiredPlayers} oyuncu
+        Boş Yer: {emptySlots}
       </Text>
 
       {/* ── CTA ─────────────────────────────── */}
@@ -677,7 +677,7 @@ export function MatchesScreen() {
     <SafeAreaView style={S.safeArea}>
       {/* ── Header ──────────────────────────── */}
       <View style={S.headerSection}>
-        <Text style={S.headerTitle}>Lobi</Text>
+        <Text style={S.headerTitle}>Rakip Bul</Text>
         <Text style={S.headerSubtitle}>Maç bul, partner eşleş</Text>
       </View>
 

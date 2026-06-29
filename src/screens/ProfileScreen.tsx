@@ -26,6 +26,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useVerificationGuard } from '../hooks/useVerificationGuard';
+import { useTournaments } from '../hooks/useTournaments';
 import { db } from '../services/firebase';
 import { avatarColor } from '../services/userService';
 import type { RootTabParamList } from '../navigation/types';
@@ -233,6 +234,7 @@ function makeStyles(_c: ColorTokens, _isDark: boolean) {
 
 export function ProfileScreen() {
   const { uid, hasRole } = useAuth();
+  const { myTournaments } = useTournaments(uid);
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const { profile, requireVerification } = useVerificationGuard();
   const { theme } = useTheme();
@@ -704,7 +706,7 @@ export function ProfileScreen() {
         )}
 
         {/* ── 7. Organizer CTA Banner ──────────────────────────────────────── */}
-        {hasRole('organizer') && (
+        {(hasRole('organizer') || myTournaments.length > 0) && (
           <Animated.View
             entering={anim(320)}
             style={{ paddingHorizontal: sp.lg }}

@@ -21,6 +21,8 @@ export type MatchDocument = {
   status: 'OPEN' | 'FULL' | 'CANCELLED';
   /** epoch-ms timestamp set by the client at creation time */
   createdAt: number;
+  /** Free-text location hint supplied by the host, e.g. "Çankaya / Ankara Tenis Kulübü" */
+  locationText?: string;
 
   // ── Post-match scoring ────────────────────────────────────────────────────
   /** Whether a score has been submitted for this match. Defaults to false. */

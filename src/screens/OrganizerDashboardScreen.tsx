@@ -171,18 +171,17 @@ function makeStyles(c: ColorTokens) {
       flexDirection: 'row',   // explicit — prevents children from stacking
       alignItems: 'center',   // prevent pills from stretching to fill cross-axis
       paddingHorizontal: 16,
-      paddingVertical: 6,
+      paddingVertical: 3,
       gap: 2,
     },
     selectorPill: {
       alignSelf: 'center',    // shrink-wrap height; do not stretch to fill parent
-      paddingHorizontal: 14,
-      paddingVertical: 7,
+      paddingHorizontal: 12,
+      paddingVertical: 4,
       borderRadius: 20,
       borderWidth: 1,
       borderColor: c.border.default,
       backgroundColor: c.surface.card,
-      // maxWidth removed — pills should size to their text content
     },
     selectorPillActive: {
       backgroundColor: c.accent.primary,

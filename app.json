@@ -10,12 +10,20 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.rezle.app",
       "googleServicesFile": "./GoogleService-Info.plist",
+      "config": {
+        "googleMapsApiKey": "AIzaSyDYL81vOzYr7SfGjFaurkUTR_VhLk2RpmU"
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.rezle.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDYL81vOzYr7SfGjFaurkUTR_VhLk2RpmU"
+        }
+      },
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -28,6 +36,12 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Yakındaki tenis kortlarını göstermek için konumunuza ihtiyacımız var."
+        }
+      ],
       "@react-native-google-signin/google-signin",
       "expo-apple-authentication",
       [

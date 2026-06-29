@@ -24,6 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import {
+  ActivityIndicator,
   Image,
   ImageBackground,
   ScrollView,
@@ -35,7 +36,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 import { PopularCourtsCarousel } from '../components/PopularCourtsCarousel';
 import type { DeckCourt } from '../components/PopularCourtsCarousel';
@@ -742,26 +743,41 @@ export function ExploreScreen() {
   const [activeFilter, setActiveFilter] = useState(FILTERS[0].label);
 
   const [isMapView, setIsMapView] = useState(false);
+  const [locationPermissionResolved, setLocationPermissionResolved] = useState(false);
+  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
   const [selectedMapClub, setSelectedMapClub] = useState<Club | null>(null);
   const [popupClub, setPopupClub] = useState<Club | null>(null);
   const popupClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
+  const mapRef = useRef<any>(null);
 
   const cardY = useSharedValue(300);
   const cardOpacity = useSharedValue(0);
 
   useEffect(() => {
+    let cameraTimer: ReturnType<typeof setTimeout> | null = null;
+
     if (selectedMapClub) {
       if (popupClearRef.current) clearTimeout(popupClearRef.current);
       setPopupClub(selectedMapClub);
       cardY.value = withSpring(0, { damping: 18, stiffness: 200 });
       cardOpacity.value = withTiming(1, { duration: 200 });
+      // Defer animateCamera so the Fabric UIManager finishes committing the
+      // MapView's native tag before the imperative call fires — prevents the
+      // "Unable to find view for viewState" Reanimated crash on Android.
+      cameraTimer = setTimeout(() => {
+        mapRef.current?.animateCamera(
+          { center: { latitude: selectedMapClub.latitude, longitude: selectedMapClub.longitude }, zoom: 15 },
+          { duration: 700 },
+        );
+      }, 150);
     } else {
       cardY.value = withTiming(300, { duration: 280, easing: Easing.in(Easing.cubic) });
       cardOpacity.value = withTiming(0, { duration: 220 });
       popupClearRef.current = setTimeout(() => setPopupClub(null), 310);
     }
     return () => {
+      if (cameraTimer) clearTimeout(cameraTimer);
       if (popupClearRef.current) clearTimeout(popupClearRef.current);
     };
   }, [selectedMapClub]);
@@ -794,6 +810,7 @@ export function ExploreScreen() {
       Location.requestForegroundPermissionsAsync()
         .then(({ status }) => {
           if (status === 'granted') {
+            setLocationPermissionGranted(true);
             return Location.getCurrentPositionAsync({});
           }
           throw new Error('Permission denied');
@@ -801,10 +818,17 @@ export function ExploreScreen() {
         .then((loc) => {
           setUserLocation(loc);
         })
-        .catch(() => { });
+        .catch(() => { })
+        .finally(() => {
+          setLocationPermissionResolved(true);
+          setIsMapView(true);
+        });
+    } else {
+      setIsMapView(false);
+      setLocationPermissionResolved(false);
+      setLocationPermissionGranted(false);
+      setSelectedMapClub(null);
     }
-    setIsMapView(prev => !prev);
-    setSelectedMapClub(null);
   }, [isMapView]);
 
   const topRatedClubs = CLUBS.slice(0, 3);
@@ -996,13 +1020,21 @@ export function ExploreScreen() {
           </ScrollView>
         )}
 
-        {isMapView && (
+        {isMapView && !locationPermissionResolved && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: c.background.secondary, alignItems: 'center', justifyContent: 'center' }]}>
+            <ActivityIndicator size="large" color={c.accent.primary} />
+          </View>
+        )}
+
+        {isMapView && locationPermissionResolved && (
           <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
             <MapView
+              ref={mapRef}
+              provider={PROVIDER_GOOGLE}
               style={S.mapView}
               initialRegion={DEFAULT_REGION}
-              showsUserLocation
-              showsMyLocationButton
+              showsUserLocation={locationPermissionGranted}
+              showsMyLocationButton={locationPermissionGranted}
               onPress={() => setSelectedMapClub(null)}
             >
               {CLUBS.map((club) => (
