@@ -1,10 +1,92 @@
-[debug] [2026-06-10T14:27:29.624Z] ----------------------------------------------------------------------
-[debug] [2026-06-10T14:27:29.629Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\MUSTAFAALGUN\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init functions
-[debug] [2026-06-10T14:27:29.629Z] CLI Version:   15.19.1
-[debug] [2026-06-10T14:27:29.629Z] Platform:      win32
-[debug] [2026-06-10T14:27:29.629Z] Node Version:  v22.19.0
-[debug] [2026-06-10T14:27:29.630Z] Time:          Wed Jun 10 2026 17:27:29 GMT+0300 (GMT+03:00)
-[debug] [2026-06-10T14:27:29.630Z] ----------------------------------------------------------------------
+[debug] [2026-06-18T11:30:36.056Z] ----------------------------------------------------------------------
+[debug] [2026-06-18T11:30:36.059Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\MUSTAFAALGUN\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init functions
+[debug] [2026-06-18T11:30:36.060Z] CLI Version:   15.19.1
+[debug] [2026-06-18T11:30:36.060Z] Platform:      win32
+[debug] [2026-06-18T11:30:36.060Z] Node Version:  v22.19.0
+[debug] [2026-06-18T11:30:36.060Z] Time:          Thu Jun 18 2026 14:30:36 GMT+0300 (GMT+03:00)
+[debug] [2026-06-18T11:30:36.060Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-06-18T11:30:36.063Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\Users\MUSTAFAALGUN\Desktop\Mustafa Dev\tenis-rezervasyon
+
+Before we get started, keep in mind:
+
+  * You are initializing within an existing Firebase project directory
+
+[debug] [2026-06-18T11:30:38.817Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-06-18T11:30:38.817Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] 
+[debug] [2026-06-18T11:30:41.347Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-18T11:30:41.347Z] > authorizing via signed-in user (musti.sonofgaia@gmail.com)
+[debug] [2026-06-18T11:30:41.349Z] Checked if tokens are valid: false, expires at: 1781108230166
+[debug] [2026-06-18T11:30:41.349Z] Checked if tokens are valid: false, expires at: 1781108230166
+[debug] [2026-06-18T11:30:41.349Z] > refreshing access token with scopes: []
+[debug] [2026-06-18T11:30:41.351Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-06-18T11:30:41.352Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-06-18T11:30:41.679Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-06-18T11:30:41.679Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-06-18T11:30:41.695Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/tenis-rezervasyon-81a28 [none]
+[debug] [2026-06-18T11:30:42.910Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/tenis-rezervasyon-81a28 200
+[debug] [2026-06-18T11:30:42.910Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/tenis-rezervasyon-81a28 {"projectId":"tenis-rezervasyon-81a28","projectNumber":"208140638479","displayName":"tenis-rezervasyon","name":"projects/tenis-rezervasyon-81a28","resources":{"hostingSite":"tenis-rezervasyon-81a28"},"state":"ACTIVE","etag":"1_c35739a2-7938-4ad1-92e7-f7a8ae8db1bb"}
+[info] i  Using project tenis-rezervasyon-81a28 (tenis-rezervasyon) . 
+[info] 
+=== Functions Setup
+[debug] [2026-06-18T11:30:42.924Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-18T11:30:42.925Z] > authorizing via signed-in user (musti.sonofgaia@gmail.com)
+[debug] [2026-06-18T11:30:42.925Z] [iam] checking project tenis-rezervasyon-81a28 for permissions ["firebase.projects.get"]
+[debug] [2026-06-18T11:30:42.925Z] Checked if tokens are valid: true, expires at: 1781785840679
+[debug] [2026-06-18T11:30:42.925Z] Checked if tokens are valid: true, expires at: 1781785840679
+[debug] [2026-06-18T11:30:42.926Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions [none]
+[debug] [2026-06-18T11:30:42.926Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions  x-goog-user-project=tenis-rezervasyon-81a28
+[debug] [2026-06-18T11:30:42.926Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2026-06-18T11:30:43.941Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions 200
+[debug] [2026-06-18T11:30:43.941Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions {"permissions":["firebase.projects.get"]}
+[info] 
+Detected existing codebase(s): default
+
+[info] Let's create a new codebase for your functions.
+[info] A directory corresponding to the codebase will be created in your project
+[info] with sample code pre-configured.
+
+[info] See https://firebase.google.com/docs/functions/organize-functions for
+[info] more information on organizing your functions using codebases.
+
+[info] Functions can be deployed with firebase deploy.
+
+[debug] [2026-06-18T11:31:06.650Z] ExitPromptError: User force closed the prompt with SIGINT
+    at Interface.sigint (C:\Users\MUSTAFAALGUN\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\@inquirer\core\dist\commonjs\lib\create-prompt.js:101:37)
+    at Interface.emit (node:events:519:28)
+    at [_ttyWrite] [as _ttyWrite] (node:internal/readline/interface:1132:18)
+    at ReadStream.onkeypress (node:internal/readline/interface:271:20)
+    at ReadStream.emit (node:events:531:35)
+    at emitKeys (node:internal/readline/utils:370:14)
+    at emitKeys.next (<anonymous>)
+    at ReadStream.onData (node:internal/readline/emitKeypressEvents:64:36)
+    at ReadStream.emit (node:events:519:28)
+    at addChunk (node:internal/streams/readable:561:12)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2026-06-18T11:31:09.379Z] ----------------------------------------------------------------------
+[debug] [2026-06-18T11:31:09.382Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\MUSTAFAALGUN\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init functions
+[debug] [2026-06-18T11:31:09.383Z] CLI Version:   15.19.1
+[debug] [2026-06-18T11:31:09.383Z] Platform:      win32
+[debug] [2026-06-18T11:31:09.383Z] Node Version:  v22.19.0
+[debug] [2026-06-18T11:31:09.383Z] Time:          Thu Jun 18 2026 14:31:09 GMT+0300 (GMT+03:00)
+[debug] [2026-06-18T11:31:09.384Z] ----------------------------------------------------------------------
 [debug] 
 [info] 
      ######## #### ########  ######## ########     ###     ######  ########
@@ -27,35 +109,30 @@ Before we get started, keep in mind:
 [info] First, let's associate this project directory with a Firebase project.
 [info] You can create multiple project aliases by running firebase use --add, 
 [info] 
-[debug] [2026-06-10T14:27:41.020Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
-[debug] [2026-06-10T14:27:41.020Z] > authorizing via signed-in user (musti.sonofgaia@gmail.com)
-[debug] [2026-06-10T14:27:41.021Z] Checked if tokens are valid: false, expires at: 1781097958791
-[debug] [2026-06-10T14:27:41.022Z] Checked if tokens are valid: false, expires at: 1781097958791
-[debug] [2026-06-10T14:27:41.022Z] > refreshing access token with scopes: []
-[debug] [2026-06-10T14:27:41.024Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
-[debug] [2026-06-10T14:27:41.024Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
-[debug] [2026-06-10T14:27:41.394Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
-[debug] [2026-06-10T14:27:41.394Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
-[debug] [2026-06-10T14:27:41.410Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/tenis-rezervasyon-81a28 [none]
-[debug] [2026-06-10T14:27:41.949Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/tenis-rezervasyon-81a28 200
-[debug] [2026-06-10T14:27:41.949Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/tenis-rezervasyon-81a28 {"projectId":"tenis-rezervasyon-81a28","projectNumber":"208140638479","displayName":"tenis-rezervasyon","name":"projects/tenis-rezervasyon-81a28","resources":{"hostingSite":"tenis-rezervasyon-81a28"},"state":"ACTIVE","etag":"1_d5e9c32f-62fe-49f7-8a52-d8e46b34ac23"}
+[debug] [2026-06-18T11:31:33.788Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-18T11:31:33.788Z] > authorizing via signed-in user (musti.sonofgaia@gmail.com)
+[debug] [2026-06-18T11:31:33.789Z] Checked if tokens are valid: true, expires at: 1781785840679
+[debug] [2026-06-18T11:31:33.789Z] Checked if tokens are valid: true, expires at: 1781785840679
+[debug] [2026-06-18T11:31:33.791Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/tenis-rezervasyon-81a28 [none]
+[debug] [2026-06-18T11:31:34.311Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/tenis-rezervasyon-81a28 200
+[debug] [2026-06-18T11:31:34.311Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/tenis-rezervasyon-81a28 {"projectId":"tenis-rezervasyon-81a28","projectNumber":"208140638479","displayName":"tenis-rezervasyon","name":"projects/tenis-rezervasyon-81a28","resources":{"hostingSite":"tenis-rezervasyon-81a28"},"state":"ACTIVE","etag":"1_c35739a2-7938-4ad1-92e7-f7a8ae8db1bb"}
 [info] i  Using project tenis-rezervasyon-81a28 (tenis-rezervasyon) . 
 [info] 
 === Functions Setup
-[debug] [2026-06-10T14:27:41.962Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
-[debug] [2026-06-10T14:27:41.963Z] > authorizing via signed-in user (musti.sonofgaia@gmail.com)
-[debug] [2026-06-10T14:27:41.963Z] [iam] checking project tenis-rezervasyon-81a28 for permissions ["firebase.projects.get"]
-[debug] [2026-06-10T14:27:41.963Z] Checked if tokens are valid: true, expires at: 1781105260394
-[debug] [2026-06-10T14:27:41.963Z] Checked if tokens are valid: true, expires at: 1781105260394
-[debug] [2026-06-10T14:27:41.963Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions [none]
-[debug] [2026-06-10T14:27:41.963Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions  x-goog-user-project=tenis-rezervasyon-81a28
-[debug] [2026-06-10T14:27:41.963Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions {"permissions":["firebase.projects.get"]}
-[debug] [2026-06-10T14:27:43.032Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions 200
-[debug] [2026-06-10T14:27:43.032Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2026-06-18T11:31:34.318Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-18T11:31:34.318Z] > authorizing via signed-in user (musti.sonofgaia@gmail.com)
+[debug] [2026-06-18T11:31:34.319Z] [iam] checking project tenis-rezervasyon-81a28 for permissions ["firebase.projects.get"]
+[debug] [2026-06-18T11:31:34.319Z] Checked if tokens are valid: true, expires at: 1781785840679
+[debug] [2026-06-18T11:31:34.319Z] Checked if tokens are valid: true, expires at: 1781785840679
+[debug] [2026-06-18T11:31:34.319Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions [none]
+[debug] [2026-06-18T11:31:34.319Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions  x-goog-user-project=tenis-rezervasyon-81a28
+[debug] [2026-06-18T11:31:34.319Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2026-06-18T11:31:35.617Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions 200
+[debug] [2026-06-18T11:31:35.617Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tenis-rezervasyon-81a28:testIamPermissions {"permissions":["firebase.projects.get"]}
 [info] 
 Detected existing codebase(s): default
 
-[debug] [2026-06-10T14:27:48.611Z] ExitPromptError: User force closed the prompt with SIGINT
+[debug] [2026-06-18T11:31:45.436Z] ExitPromptError: User force closed the prompt with SIGINT
     at Interface.sigint (C:\Users\MUSTAFAALGUN\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\@inquirer\core\dist\commonjs\lib\create-prompt.js:101:37)
     at Interface.emit (node:events:519:28)
     at [_ttyWrite] [as _ttyWrite] (node:internal/readline/interface:1132:18)
